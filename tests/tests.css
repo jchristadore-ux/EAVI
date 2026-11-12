@@ -1,0 +1,6 @@
+body.tests { height: auto; overflow: auto; padding: 16px; font-family: var(--mono); font-size: 13px; }
+#summary { font-size: 16px; font-weight: 700; margin-bottom: 12px; }
+#summary.ok { color: var(--ok); } #summary.bad { color: var(--danger); }
+#results { margin: 0 0 24px; padding-left: 28px; display: flex; flex-direction: column; gap: 3px; }
+#results li.pass { color: var(--text-2); } #results li.fail { color: var(--danger); white-space: pre-wrap; }
+#app-host { height: 720px; width: 390px; border: 1px solid var(--line-strong); border-radius: 12px; overflow: hidden; }

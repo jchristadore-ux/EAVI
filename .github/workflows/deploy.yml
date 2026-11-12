@@ -1,0 +1,47 @@
+# Builds the site with tools/build.ps1 and publishes dist/site to GitHub Pages.
+# First run (12 November 2026) failed at the demo-seed check under pwsh 7; build and check now run under
+# Windows PowerShell 5.1 and the check is tools/check-site.ps1, which prints each finding. See docs/GITHUB.md.
+#
+# Before enabling, decide who may open the site. GitHub Pages is PUBLIC unless the repository belongs to a
+# GitHub Enterprise Cloud organization with private Pages enabled. The site holds no audit data (records stay in
+# each browser), but docs/SECURITY.md asks for access control in front of the application.
+name: Deploy site
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Windows PowerShell 5.1, the environment the build was written and tested in (not pwsh 7).
+      - name: Build (device-only site, no demo data)
+        shell: powershell
+        run: ./tools/build.ps1
+      - name: Check that the site carries no demo seed
+        shell: powershell
+        run: ./tools/check-site.ps1
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist/site
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

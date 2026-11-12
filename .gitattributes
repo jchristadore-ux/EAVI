@@ -1,0 +1,4 @@
+# The project is tested with LF line endings; keep them on every platform so a checkout builds the same bytes.
+* text=auto eol=lf
+*.png binary
+*.zip binary

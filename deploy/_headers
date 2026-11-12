@@ -1,0 +1,21 @@
+# Response headers for Cloudflare Pages or Netlify. Copy this file into dist/site/ before uploading.
+# Device-only build. For a sync-enabled build, add the ONE approved workspace origin after 'self' in connect-src,
+# exactly as it was given to tools\build.ps1 -SyncOrigin.
+# Access control (who may load the site) is configured in the host, not here.
+
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
+  X-Frame-Options: DENY
+  Permissions-Policy: camera=(), microphone=(), geolocation=()
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+
+/
+  Cache-Control: no-cache
+
+/index.html
+  Cache-Control: no-cache
+
+/sw.js
+  Cache-Control: no-cache

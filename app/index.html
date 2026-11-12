@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>AV Environment Intelligence</title>
+<meta name="description" content="AV environment audit workspace: room audits, device inventory, infrastructure documentation, findings and reporting.">
+<meta name="theme-color" content="#0f1522">
+<meta name="color-scheme" content="dark">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="AV Intelligence">
+<meta name="format-detection" content="telephone=no">
+<!-- Device-only by default: connect-src 'self' means the browser refuses every connection to any other origin.
+     Cloud sync is enabled only by rebuilding with the approved workspace origin: tools\build.ps1 -SyncOrigin https://<project>.supabase.co
+     (the build adds that single origin to connect-src). See docs/DEPLOYMENT.md. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+<link rel="manifest" href="manifest.webmanifest" crossorigin="use-credentials">
+<link rel="icon" href="icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div id="app"><div class="boot">AV Environment Intelligence</div></div>
+<noscript>This application requires JavaScript.</noscript>
+<script src="js/core.js"></script>
+<script src="js/schema.js"></script>
+<script src="js/store.js"></script>
+<script src="js/rules.js"></script>
+<script src="js/actions.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/photos.js"></script>
+<script src="js/zip.js"></script>
+<script src="js/xlsx.js"></script>
+<script src="js/pdf.js"></script>
+<script src="js/reports.js"></script>
+<script src="js/exporter.js"></script>
+<script src="js/handoff.js"></script>
+<script src="js/sync.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/roomimport.js"></script>
+<script src="js/pages/command.js"></script>
+<script src="js/pages/environment.js"></script>
+<script src="js/pages/audits.js"></script>
+<script src="js/pages/devices.js"></script>
+<script src="js/pages/infrastructure.js"></script>
+<script src="js/pages/backlog.js"></script>
+<script src="js/pages/coordination.js"></script>
+<script src="js/pages/spares.js"></script>
+<script src="js/pages/reports.js"></script>
+<script src="js/pages/export.js"></script>
+<script src="js/pages/settings.js"></script>
+<script src="js/shell.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
