@@ -41,6 +41,7 @@ $sha = [Security.Cryptography.SHA256]::Create()
 $all = New-Object IO.MemoryStream
 foreach ($f in $files) { $h = $sha.ComputeHash([IO.File]::ReadAllBytes($f.FullName)); $all.Write($h, 0, $h.Length) }
 $so = [Text.Encoding]::UTF8.GetBytes($SyncOrigin); $all.Write($so, 0, $so.Length)   # a different sync origin is a different build
+$tw = $sha.ComputeHash([IO.File]::ReadAllBytes((Join-Path $PSScriptRoot 'sw.template.js'))); $all.Write($tw, 0, $tw.Length)   # so is a changed worker
 $version = -join ($sha.ComputeHash($all.ToArray())[0..5] | ForEach-Object { $_.ToString('x2') })
 $list = "[`n  './',`n" + (($rel | ForEach-Object { "  '$_'" }) -join ",`n") + "`n]"
 $sw = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'sw.template.js'), $utf8).Replace("'__VERSION__'", "'$version'").Replace('__FILES__', $list)

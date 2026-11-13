@@ -19,7 +19,12 @@ What was tested, how, with what result — and what was not. Date of this run: *
 >
 > **Later run, 13 November 2026 (automatic switch to a new version):** 60 tests; **59 pass**, including the new
 > *application updates* test. *Offline shell* fails for the same browser-pane reason, so its new check that the worker
-> reports its version is not verified by this run.
+> reports its version is not verified by this run. Checked by hand on the deployed site instead: the worker answered
+> with its version; a page left open on one version reloaded itself into the next after a simulated return to the
+> app. That check found that a version deployed within ten minutes of the previous one had been filled with stale
+> files from the browser's HTTP cache (GitHub Pages lets browsers keep files for 10 minutes); the worker now installs
+> with `cache: 'reload'`, and after that fix the open page reloaded into the fresh files. The build version now also
+> changes when `tools/sw.template.js` changes.
 
 ## 1. Summary
 
