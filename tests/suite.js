@@ -1617,7 +1617,7 @@
   });
 
   /* ------------------------------------------------------------------ room list import, production build */
-  test('room list import: a CSV becomes buildings, floors, areas and rooms; nothing is guessed, nothing existing is changed, and a second import adds nothing', function () {
+  test('room list import: a CSV becomes buildings, floors, areas and rooms; nothing is guessed, a value already set is not changed, and a second import adds nothing', function () {
     const RI = EV.roomImport;
     eq(EV.csv.parse('﻿a;b\r\n"x;1";"say ""hi"""\r\n\r\n"two\nlines";z\r\n'), [['a', 'b'], ['x;1', 'say "hi"'], ['two\nlines', 'z']], 'CSV reader: BOM, semicolons, quotes, line breaks, blank lines');
     eq(csvParse(RI.template().replace(/^﻿/, ''))[0].slice(0, 8), ['Building', 'Building ID', 'Address', 'Floor', 'Floor designation', 'Area', 'Room number', 'Room name'], 'template header');
@@ -1640,11 +1640,11 @@
     eq([parsed.rows.length, parsed.unknown], [8, ['Owner']], 'eight lines read; the unused column is named');
     const plan = RI.plan(parsed); RI.needed(plan);
     eq(plan.rows.map(function (r) { return r.status; }), ['new', 'new', 'duplicate', 'new', 'error', 'error', 'error', 'exists']);
-    eq(plan.counts, { rooms: 3, exists: 1, duplicate: 1, error: 3, buildings: 1, floors: 2, areas: 1, unfit: 1, noType: 1 });
+    eq(plan.counts, { rooms: 3, fill: 0, fields: 0, exists: 1, duplicate: 1, error: 3, buildings: 1, floors: 2, areas: 1, unfit: 1, noType: 1 });
     eq(['buildings', 'floors', 'areas', 'rooms'].map(function (t) { return store.all(t).length - before[t]; }), [0, 0, 0, 0], 'planning writes nothing');
     const createdBefore = store.all('activity_log').filter(function (l) { return l.action === 'created'; }).length;
     const done = RI.apply(plan, 'rooms.csv');
-    eq(done, { rooms: 3, buildings: 1, floors: 2, areas: 1 });
+    eq(done, { rooms: 3, buildings: 1, floors: 2, areas: 1, filled: 0, fields: 0 });
     eq(['buildings', 'floors', 'areas', 'rooms'].map(function (t) { return store.all(t).length - before[t]; }), [1, 2, 1, 3]);
     const tower = store.all('buildings').find(function (b) { return b.name === 'Import Tower'; });
     const room = function (n) { return store.all('rooms').find(function (r) { return r.building_id === tower.id && (r.number === n || r.name === n); }); };
@@ -1679,6 +1679,44 @@
     assert(/no rooms/.test(empty), 'a header-only file is refused with a clear message: ' + empty);
     eq([again.counts.rooms, again.counts.buildings, again.counts.floors, again.counts.areas, again.counts.exists], [0, 0, 0, 0, 5], 'importing the same list again adds nothing');
     eq(X.validate(X.collect(X.resolveScope({ mode: 'full' })), null, null).structural_errors, 0, 'imported records export cleanly');
+  });
+  test('room list import fills in existing rooms: only empty fields take the list\'s value, set values and notes are never changed, the space summary columns are read', function () {
+    const RI = EV.roomImport;
+    RI.apply(RI.read('Building,Floor,Room number\r\nFill Tower,7,7A\r\nFill Tower,7,7B\r\n'), 'first.csv');
+    const tower = store.all('buildings').find(function (b) { return b.name === 'Fill Tower'; });
+    const room = function (n) { return store.all('rooms').find(function (r) { return r.building_id === tower.id && r.number === n; }); };
+    /* 7B was edited in the application after the first import */
+    store.update('rooms', room('7B').id, { capacity: 6, display_config: 'Existing display', notes: 'Auditor note' });
+    const b7Notes = room('7B').notes;
+    const csv = [
+      'Building,Floor,Room number,Room name,Room type,Capacity,DSP platform,Display configuration,Camera,Mic,Control platform,Scheduling platform,Operational status,Notes',
+      'Fill Tower,7,7A,Room Seven A,huddle room,4,Biamp Tesira,Samsung 55,Neat Bar,Neat Bar,Crestron,,Fully operational,Full notes',
+      'Fill Tower,7,7B,,Teleporter,10,Q-SYS,New display,,,,,,Should not be added',
+      'Fill Tower,7,7A,,,9,,,,,,,,',
+      'Fill Tower,7,7C,New room,Huddle room,,Q-SYS,,,,,Robin,Degraded,'
+    ].join('\r\n') + '\r\n';
+    const parsed = RI.read(csv);
+    eq(parsed.unknown, [], 'every space summary column is recognised, Camera and Mic included');
+    const plan = RI.plan(parsed);
+    eq(plan.rows.map(function (r) { return r.status; }), ['fill', 'fill', 'duplicate', 'new'], 'existing rooms are filled in; a second line for the same room is used once');
+    eq([plan.counts.fill, plan.counts.fields, plan.counts.rooms], [2, 11, 1], '7A takes 10 fields, 7B one');
+    const b7 = plan.rows[1];
+    assert(b7.attention && b7.notes.some(function (n) { return /Room type “Teleporter” does not fit: not filled in/.test(n); }) &&
+      b7.notes.some(function (n) { return /Already set, left as it is: Capacity, Display configuration, Notes/.test(n); }), 'what is not filled is reported: ' + b7.notes.join(' | '));
+    const done = RI.apply(plan, 'second.csv');
+    eq([done.rooms, done.filled, done.fields], [1, 2, 11]);
+    const a = room('7A'), b = room('7B'), c = room('7C');
+    eq([a.name, a.room_type, a.capacity, a.dsp_platform, a.display_config, a.camera_config, a.microphone_config, a.control_platform, a.operational_status, a.notes],
+      ['Room Seven A', 'Huddle room', 4, 'Biamp Tesira', 'Samsung 55', 'Neat Bar', 'Neat Bar', 'Crestron', 'Fully operational', 'Full notes'], 'empty fields are filled, list values written as the app stores them');
+    eq([b.capacity, b.display_config, b.dsp_platform, b.room_type, b.notes], [6, 'Existing display', 'Q-SYS', '', b7Notes], 'set values, notes and values that do not fit are left as they were');
+    eq([c.dsp_platform, c.scheduling_platform, c.operational_status], ['Q-SYS', 'Robin', 'Degraded'], 'a new room takes the new columns too');
+    /* (the store folds a change made right after a record was created into its creation entry, so look at every entry of the room) */
+    const history = JSON.stringify(store.all('activity_log').filter(function (l) { return l.entity_id === a.id; }).map(function (l) { return l.changes; }));
+    assert(history.indexOf('"f":"dsp_platform","from":"","to":"Biamp Tesira"') >= 0, 'the filled fields are in the room\'s change history, from empty to the list\'s value');
+    assert(store.all('activity_log').some(function (l) { return l.action === 'imported' && /2 existing rooms filled in \(11 fields\)/.test(l.summary); }), 'and the import summary says so');
+    const again = RI.plan(RI.read(csv));
+    eq([again.counts.fill, again.counts.rooms], [0, 0], 'the same list a second time fills nothing and adds nothing');
+    eq(X.validate(X.collect(X.resolveScope({ mode: 'full' })), null, null).structural_errors, 0, 'filled records export cleanly');
   });
   test('the production site carries no demo data: no demo records, no seed file, no control that offers them', async function () {
     const page = await (await fetch('../app/index.html', { cache: 'no-store' })).text();

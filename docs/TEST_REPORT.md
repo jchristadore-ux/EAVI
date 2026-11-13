@@ -12,6 +12,10 @@ What was tested, how, with what result — and what was not. Date of this run: *
 > had opened the previous version: after one reload the new worker served the page, the earlier cache was gone, the
 > earlier database had been moved (its organization ID arrived) and deleted, and no page text names a client.
 > The rest of this report describes the earlier run.
+>
+> **Later run, 13 November 2026 (room list import fills in existing rooms, space summary columns):** 59 tests; **58
+> pass**, including the new fill-in test and the updated import test. The one failure is again *offline shell*, for the
+> same browser-pane reason as above.
 
 ## 1. Summary
 

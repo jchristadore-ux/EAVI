@@ -1,7 +1,8 @@
 /* roomimport.js — load a room list (CSV) into Buildings & Floors.
  * A list is read, checked and shown as a plan before anything is written. Nothing is guessed: a value that does not
- * fit (an unknown room type, a capacity that is not a whole number) is left empty and reported, a line that cannot be
- * placed with certainty is not imported, and a room that already exists is never changed. */
+ * fit (an unknown room type, a capacity that is not a whole number) is left empty and reported, and a line that cannot
+ * be placed with certainty is not imported. A room that already exists is only filled in: a field it leaves empty takes
+ * the list's value; a field that already holds a value is never changed. */
 (function () {
   'use strict';
   const EV = window.EV, U = EV.U, S = EV.S, store = EV.store, A = EV.act;
@@ -50,8 +51,22 @@
     ['criticality', 'Criticality', ['business criticality'], 'One of: ' + S.CRITICALITY.map(function (c) { return c[1]; }).join(', ') + '.'],
     ['conferencing_platform', 'Conferencing platform', ['vc platform'], 'One of: ' + S.CONF_PLATFORMS.join(', ') + '.'],
     ['control_platform', 'Control platform', ['av control platform', 'control system'], 'One of: ' + S.CONTROL_PLATFORMS.join(', ') + '.'],
+    ['dsp_platform', 'DSP platform', ['dsp'], 'One of: ' + S.DSP_PLATFORMS.join(', ') + '.'],
+    ['scheduling_platform', 'Scheduling platform', ['room scheduling platform', 'scheduling'], 'One of: ' + S.SCHED_PLATFORMS.join(', ') + '.'],
+    ['display_config', 'Display configuration', ['display', 'displays'], 'Free text, kept as written.'],
+    ['camera_config', 'Camera configuration', ['camera', 'cameras'], 'Free text, kept as written.'],
+    ['microphone_config', 'Microphone configuration', ['microphone', 'microphones', 'mic', 'mics'], 'Free text, kept as written.'],
+    ['operational_status', 'Operational status', ['current operational status', 'status'], 'One of: ' + S.OP_STATUS.join(', ') + '.'],
     ['notes', 'Notes', ['comments', 'remarks'], 'Optional. Kept as written.']
   ];
+  /* the room fields a list can set, with the label used on the import screen; for an existing room each is filled
+     only while it is empty */
+  RI.FIELDS = [['name', 'Room name'], ['room_type', 'Room type'], ['capacity', 'Capacity'], ['criticality', 'Criticality'],
+    ['conferencing_platform', 'Conferencing platform'], ['control_platform', 'Control platform'], ['dsp_platform', 'DSP platform'],
+    ['scheduling_platform', 'Scheduling platform'], ['display_config', 'Display configuration'], ['camera_config', 'Camera configuration'],
+    ['microphone_config', 'Microphone configuration'], ['operational_status', 'Operational status'], ['notes', 'Notes']];
+  const LISTED = [['conferencing_platform', S.CONF_PLATFORMS, 'Conferencing platform'], ['control_platform', S.CONTROL_PLATFORMS, 'Control platform'],
+    ['dsp_platform', S.DSP_PLATFORMS, 'DSP platform'], ['scheduling_platform', S.SCHED_PLATFORMS, 'Scheduling platform'], ['operational_status', S.OP_STATUS, 'Operational status']];
   /* header names: case, and spaces, dashes, underscores and full stops between or after words, do not matter */
   const head = function (s) { return String(s == null ? '' : s).toLowerCase().replace(/[\s_\-.]+/g, ' ').trim(); };
   /* record values are compared as written, apart from case and surrounding or repeated spaces: "10.1" is not "10-1" */
@@ -89,6 +104,20 @@
 
   /* ------------------------------------------------------------------ plan: what the list would create */
   const oneOf = function (list, value) { return list.find(function (x) { return same(Array.isArray(x) ? x[1] : x, value) || (Array.isArray(x) && same(x[0], value)); }); };
+  /* the list's values for one room, in the form the room stores them. A value that must fit a list or a type and does
+     not is left out and reported in `unfit` — never replaced by a guess. */
+  function convert(r) {
+    const values = {}, unfit = [];
+    if (r.name) values.name = r.name;
+    if (r.room_type) { const t = oneOf(S.ROOM_TYPES, r.room_type); if (t) values.room_type = t; else unfit.push(['Room type', r.room_type]); }
+    if (r.capacity) { if (/^\d+$/.test(r.capacity)) values.capacity = parseInt(r.capacity, 10); else unfit.push(['Capacity', r.capacity]); }
+    if (r.criticality) { const c = oneOf(S.CRITICALITY, r.criticality); if (c) values.criticality = c[0]; else unfit.push(['Criticality', r.criticality]); }
+    LISTED.forEach(function (p) { const val = r[p[0]]; if (!val) return; const hit = oneOf(p[1], val); if (hit) values[p[0]] = hit; else unfit.push([p[2], val]); });
+    ['display_config', 'camera_config', 'microphone_config'].forEach(function (k) { if (r[k]) values[k] = r[k]; });
+    if (r.notes) values.notes = r.notes;
+    return { values: values, unfit: unfit };
+  }
+  const isEmpty = function (v) { return v == null || String(v).trim() === ''; };
   RI.plan = function (parsed) {
     const buildings = store.all('buildings'), floors = store.all('floors'), areas = store.all('areas'), rooms = store.all('rooms');
     const newB = new Map(), newF = new Map(), newA = new Map(), seen = new Map();
@@ -136,32 +165,48 @@
       /* a room is the same room when it has the same number on the same floor (or, with no number, the same name) */
       const match = function (x) { return r.number ? same(x.number, r.number) : (!x.number && same(x.name, r.name)); };
       const there = f ? rooms.find(function (x) { return x.floor_id === f.id && match(x); }) : null;
-      if (there) { row.status = 'exists'; row.notes.push('Already on this floor' + (there.archived ? ' (archived)' : '') + ': not changed'); return row; }
+      if (there) {
+        if (there.archived) { row.status = 'exists'; row.notes.push('Already on this floor (archived): not changed'); return row; }
+        /* an existing room is filled in: each field it leaves empty takes the list's value; a field that already holds a
+           value is never changed. Its notes are never edited, so a value that does not fit is reported, not added. */
+        const cv = convert(r), fill = {}, filled = [], set = [];
+        RI.FIELDS.forEach(function (f) {
+          const k = f[0];
+          if (!Object.prototype.hasOwnProperty.call(cv.values, k)) return;
+          if (isEmpty(there[k])) { fill[k] = cv.values[k]; filled.push(f[1]); }
+          else if (k === 'capacity' ? there[k] !== cv.values[k] : !same(there[k], cv.values[k])) set.push(f[1]);
+        });
+        if (filled.length) {
+          /* two lines for the same room would fill it twice, the second over the first: the room is filled once */
+          const once = 'room:' + there.id;
+          if (seen.has(once)) { row.status = 'duplicate'; row.notes.push('Same room as line ' + seen.get(once) + ' of this list: filled in once'); row.attention = true; return row; }
+          seen.set(once, r.line);
+          row.status = 'fill'; row.target = there.id; row.fill = fill; row.fields = filled.length;
+          row.notes.push('Fills in: ' + filled.join(', '));
+        } else { row.status = 'exists'; row.notes.push('Already on this floor: nothing to fill in'); }
+        cv.unfit.forEach(function (u) { row.notes.push(u[0] + ' “' + u[1] + '” does not fit: not filled in'); row.attention = true; });
+        if (set.length) { row.notes.push('Already set, left as it is: ' + set.join(', ')); row.attention = true; }
+        return row;
+      }
       const dup = fKey + '|' + (r.number ? 'n:' + key(r.number) : 'name:' + key(r.name));
       if (seen.has(dup)) { row.status = 'duplicate'; row.notes.push('Same room as line ' + seen.get(dup) + ' of this list: imported once'); return row; }
       seen.set(dup, r.line);
       /* values that must fit a list or a type: kept only when they do */
-      const data = { number: r.number, name: r.name, room_type: '', capacity: null, criticality: '', conferencing_platform: '', control_platform: '', notes: r.notes };
-      const kept = [];
-      const unfit = function (label, value) { row.notes.push(label + ' “' + value + '” does not fit: left empty, kept in the notes'); kept.push(label + ' in the source list: ' + value); };
-      if (r.room_type) { const t = oneOf(S.ROOM_TYPES, r.room_type); if (t) data.room_type = t; else unfit('Room type', r.room_type); }
-      if (r.capacity) { if (/^\d+$/.test(r.capacity)) data.capacity = parseInt(r.capacity, 10); else unfit('Capacity', r.capacity); }
-      if (r.criticality) { const c = oneOf(S.CRITICALITY, r.criticality); if (c) data.criticality = c[0]; else unfit('Criticality', r.criticality); }
-      [['conferencing_platform', S.CONF_PLATFORMS, 'Conferencing platform'], ['control_platform', S.CONTROL_PLATFORMS, 'Control platform']].forEach(function (p) {
-        const val = r[p[0]]; if (!val) return;
-        const hit = oneOf(p[1], val);
-        if (hit) data[p[0]] = hit; else unfit(p[2], val);
-      });
-      /* what did not fit is not lost: it is kept, word for word, in the room's notes */
-      if (kept.length) data.notes = [data.notes].concat(kept).filter(Boolean).join('\n');
-      row.kept = kept.length;
+      const cv = convert(r);
+      const data = Object.assign({ number: r.number, name: '', room_type: '', capacity: null, criticality: '', conferencing_platform: '', control_platform: '',
+        dsp_platform: '', scheduling_platform: '', display_config: '', camera_config: '', microphone_config: '', operational_status: '', notes: '' }, cv.values);
+      /* what did not fit is not lost: it is kept, word for word, in the new room's notes */
+      cv.unfit.forEach(function (u) { row.notes.push(u[0] + ' “' + u[1] + '” does not fit: left empty, kept in the notes'); });
+      if (cv.unfit.length) data.notes = [data.notes].concat(cv.unfit.map(function (u) { return u[0] + ' in the source list: ' + u[1]; })).filter(Boolean).join('\n');
+      row.kept = cv.unfit.length;
       row.noType = !data.room_type;
       row.data = data;
       return row;
     });
     const n = function (st) { return out.filter(function (r) { return r.status === st; }).length; };
     const plan = { parsed: parsed, rows: out, newBuildings: newB, newFloors: newF, newAreas: newA, unknown: parsed.unknown, headerNotes: parsed.headerNotes,
-      counts: { rooms: n('new'), exists: n('exists'), duplicate: n('duplicate'), error: n('error'), buildings: 0, floors: 0, areas: 0,
+      counts: { rooms: n('new'), fill: n('fill'), fields: out.reduce(function (s, r) { return s + (r.fields || 0); }, 0),
+        exists: n('exists'), duplicate: n('duplicate'), error: n('error'), buildings: 0, floors: 0, areas: 0,
         unfit: out.filter(function (r) { return r.status === 'new' && r.kept; }).length, noType: out.filter(function (r) { return r.status === 'new' && r.noType; }).length } };
     RI.needed(plan);
     return plan;
@@ -193,16 +238,22 @@
     });
     const floorOf = function (k) { return fRec.get(k) || store.get('floors', k); };
     need.a.forEach(function (k) { const x = plan.newAreas.get(k), f = floorOf(x.fKey); aId.set(k, made('areas', { building_id: f.building_id, floor_id: f.id, name: x.name, description: '', archived: false }).id); });
-    let rooms = 0;
+    let rooms = 0, filled = 0, fields = 0;
     plan.rows.forEach(function (r) {
-      if (r.status !== 'new') return;
-      A.addRoom(floorOf(r.where.fKey), Object.assign({}, r.data, { area_id: r.where.aKey ? (aId.get(r.where.aKey) || r.where.aKey) : null }));
-      rooms++;
+      if (r.status === 'new') {
+        A.addRoom(floorOf(r.where.fKey), Object.assign({}, r.data, { area_id: r.where.aKey ? (aId.get(r.where.aKey) || r.where.aKey) : null }));
+        rooms++;
+      } else if (r.status === 'fill') {
+        /* each filled field is in the room's change history, from empty to the list's value */
+        store.update('rooms', r.target, r.fill);
+        filled++; fields += r.fields;
+      }
     });
     const c = plan.counts, skipped = c.exists + c.duplicate + c.error;
     store.log({ action: 'imported', entity_type: 'rooms', summary: 'Room list imported' + (sourceName ? ' from ' + sourceName : '') + ': ' + U.plural(rooms, 'room') + ', ' + U.plural(c.floors, 'floor') + ', ' + U.plural(c.buildings, 'building') +
+      (filled ? ', ' + U.plural(filled, 'existing room') + ' filled in (' + U.plural(fields, 'field') + ')' : '') +
       (skipped ? ' — ' + U.plural(skipped, 'line') + ' not imported' : '') });
-    return { rooms: rooms, buildings: c.buildings, floors: c.floors, areas: c.areas };
+    return { rooms: rooms, buildings: c.buildings, floors: c.floors, areas: c.areas, filled: filled, fields: fields };
   };
 
   /* ------------------------------------------------------------------ screen: choose a file, review the plan, import */
@@ -217,15 +268,18 @@
       return file.text().then(function (text) { if (mine === st.seq) st.plan = RI.plan(RI.read(text)); })
         .catch(function (err) { if (mine === st.seq) { st.errorTitle = 'This file cannot be imported'; st.error = (err && err.message) || 'The file could not be read.'; } });
     };
-    const tone = { 'new': 'ok', exists: 'muted', duplicate: 'muted', error: 'danger' }, word = { 'new': 'Import', exists: 'Exists', duplicate: 'Repeated', error: 'Not imported' };
+    const tone = { 'new': 'ok', fill: 'accent', exists: 'muted', duplicate: 'muted', error: 'danger' }, word = { 'new': 'Import', fill: 'Fill in', exists: 'Exists', duplicate: 'Repeated', error: 'Not imported' };
+    const needsLook = function (r) { return r.status === 'error' || r.status === 'duplicate' || r.attention || r.noType || (r.status === 'new' && r.notes.length > 0); };
+    const goLabel = function (c) { return [c.rooms ? 'Import ' + U.plural(c.rooms, 'room') : '', c.fill ? 'Fill in ' + U.plural(c.fill, 'room') : ''].filter(Boolean).join(', ').replace(', Fill', ', fill') || 'Nothing to import'; };
     const sheet = ui.openSheet({
       title: 'Import a room list', sub: 'CSV file — one line per room', size: 'wide',
       render: function () {
         const p = st.plan, c = p && p.counts;
-        const rows = p ? p.rows.filter(function (r) { return st.show === 'all' || (st.show === 'attention' ? (r.status !== 'new' || r.notes.length || r.noType) : r.status === st.show); }) : [];
+        const rows = p ? p.rows.filter(function (r) { return st.show === 'all' || (st.show === 'attention' ? needsLook(r) : r.status === st.show); }) : [];
         return h('div.stack', null,
           store.readOnly ? ui.note('warn', 'This account has read-only access: a room list can be checked here, but not imported.') : null,
-          st.done ? ui.note('ok', 'Imported ' + U.plural(st.done.rooms, 'room') + ', ' + U.plural(st.done.floors, 'floor') + ', ' + U.plural(st.done.areas, 'area') + ' and ' + U.plural(st.done.buildings, 'building') + '.', { title: 'Room list imported' }) : null,
+          st.done ? ui.note('ok', 'Imported ' + U.plural(st.done.rooms, 'room') + ', ' + U.plural(st.done.floors, 'floor') + ', ' + U.plural(st.done.areas, 'area') + ' and ' + U.plural(st.done.buildings, 'building') + '.' +
+            (st.done.filled ? ' Filled in ' + U.plural(st.done.fields, 'empty field') + ' on ' + U.plural(st.done.filled, 'existing room') + '.' : ''), { title: 'Room list imported' }) : null,
           !p && !st.done ? [h('p.muted', { key: 'a' }, 'The first line names the columns. Needed: Building, Floor, and Room number or Room name. From Excel, save the sheet as “CSV UTF-8”.'),
             h('div.kv-list', { key: 'b' }, RI.COLUMNS.filter(function (x) { return ['building', 'floor', 'number', 'name'].indexOf(x[0]) < 0; }).map(function (x) { return ui.kv(x[1], x[3]); }))] : null,
           st.error ? ui.note('danger', st.error, { title: st.errorTitle }) : null,
@@ -234,15 +288,16 @@
               h('input', { id: 'room-list-file', type: 'file', accept: '.csv,text/csv,text/plain', 'class': 'file-input', tabindex: '-1', onchange: pick })),
             ui.btn('Download template', { icon: 'download', kind: 'ghost', onclick: function () { return EV.saveFile(RI.template(), 'room_list_template.csv', 'text/csv').then(function (r) { if (!r.ok) EV.toast(r.message || 'The template could not be saved here.', 'warn'); }); } })),
           p && !st.done ? [
-            h('div.tiles.tiles-3', { key: 't' },
+            h('div.tiles', { key: 't' },
               ui.stat({ key: 'n', label: 'Rooms to import', value: c.rooms, tone: c.rooms ? 'ok' : null, sub: c.buildings + ' new buildings · ' + c.floors + ' new floors · ' + c.areas + ' new areas' }),
-              ui.stat({ key: 'e', label: 'Already present', value: c.exists, sub: c.duplicate ? 'Left as they are · ' + c.duplicate + ' repeated in this list' : 'Left as they are' }),
+              ui.stat({ key: 'f', label: 'Rooms to fill in', value: c.fill, tone: c.fill ? 'accent' : null, sub: U.plural(c.fields, 'empty field') + ' · values already set are kept' }),
+              ui.stat({ key: 'e', label: 'Already present', value: c.exists, sub: c.duplicate ? 'Nothing to fill in · ' + c.duplicate + ' repeated in this list' : 'Nothing to fill in' }),
               ui.stat({ key: 'x', label: 'Lines not imported', value: c.error, tone: c.error ? 'danger' : null, sub: 'The reason is on each line' })),
             c.unfit ? ui.note('warn', U.plural(c.unfit, 'room') + ' will be imported with a value left empty because it does not fit. Nothing is guessed: the original text is kept in the room’s notes.', { key: 'w' }) : null,
             c.noType ? ui.note('info', U.plural(c.noType, 'room') + ' will be imported without a room type and listed as incomplete until one is chosen.', { key: 'y' }) : null,
             p.headerNotes.length ? ui.note('info', 'Column names: ' + p.headerNotes.join('; ') + '.', { key: 'hn' }) : null,
             p.unknown.length ? ui.note('info', 'Columns that are not used: ' + p.unknown.join(', ') + '.', { key: 'u' }) : null,
-            h('div.toolbar', { key: 'f' }, ui.select(st.show, [['all', 'All lines (' + p.rows.length + ')'], ['attention', 'Lines needing attention'], ['new', 'To import'], ['exists', 'Already present'], ['duplicate', 'Repeated in this list'], ['error', 'Not imported']],
+            h('div.toolbar', { key: 'f' }, ui.select(st.show, [['all', 'All lines (' + p.rows.length + ')'], ['attention', 'Lines needing attention'], ['new', 'To import'], ['fill', 'To fill in'], ['exists', 'Already present'], ['duplicate', 'Repeated in this list'], ['error', 'Not imported']],
               { empty: false, aria: 'Show', onchange: function (v) { st.show = v; } })),
             h('div.list', { key: 'l' }, rows.slice(0, 300).map(function (r) {
               return h('div.row', { key: 'r' + r.line },
@@ -257,7 +312,7 @@
         const p = st.plan;
         return [h('span.grow', { key: 'g' }),
           ui.btn(st.done ? 'Done' : 'Cancel', { key: 'c', kind: st.done ? 'primary' : 'ghost', onclick: function () { ui.closeSheet(sheet); } }),
-          p && !st.done ? ui.btn(st.busy ? 'Importing…' : 'Import ' + U.plural(p.counts.rooms, 'room'), { key: 'i', kind: 'primary', icon: 'check', id: 'room-import-go', disabled: st.busy || store.readOnly || !p.counts.rooms, onclick: function () {
+          p && !st.done ? ui.btn(st.busy ? 'Importing…' : goLabel(p.counts), { key: 'i', kind: 'primary', icon: 'check', id: 'room-import-go', disabled: st.busy || store.readOnly || !(p.counts.rooms || p.counts.fill), onclick: function () {
             /* one import per plan: a second tap, or a retry after a failure, never writes the same list twice */
             if (st.busy || st.done || !st.plan) return;
             st.busy = true;

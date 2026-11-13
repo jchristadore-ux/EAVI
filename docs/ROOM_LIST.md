@@ -30,6 +30,12 @@ for that information ([SECURITY.md](SECURITY.md)).
 | Criticality | Business criticality | No | Standard, High visibility, or Executive / critical (or the short forms the application stores) |
 | Conferencing platform | VC platform | No | Must be one of the application's platforms |
 | Control platform | AV control platform, Control system | No | Must be one of the application's control platforms |
+| DSP platform | DSP | No | Must be one of the application's DSP platforms |
+| Scheduling platform | Room scheduling platform, Scheduling | No | Must be one of the application's scheduling platforms |
+| Display configuration | Display, Displays | No | Free text, kept as written |
+| Camera configuration | Camera, Cameras | No | Free text, kept as written |
+| Microphone configuration | Microphone, Microphones, Mic, Mics | No | Free text, kept as written |
+| Operational status | Current operational status, Status | No | Fully operational, Operational with issues, Degraded, Out of service, or Unknown |
 | Notes | Comments, Remarks | No | |
 
 Room types: Small conference room, Medium conference room, Large conference room, Executive conference room,
@@ -52,8 +58,12 @@ Any other column is ignored and named on the import screen.
 - **Nothing is guessed.** A room type, criticality or platform that is not in the application's list, or a capacity
   that is not a whole number, is left empty. The original text is kept word for word in the room's notes, and the
   line is marked on the import screen. A room without a room type is listed as incomplete until one is chosen.
-- **Nothing existing is changed.** A room with the same number on the same floor (or, with no number, the same
-  name) is left exactly as it is. Importing the same list twice adds nothing.
+- **An existing room is only filled in.** A room with the same number on the same floor (or, with no number, the same
+  name) is not created again. Each of its fields that is still empty takes the list's value; a field that already
+  holds a value is never changed, and the import screen lists those as *Already set, left as it is*. The room's notes
+  are filled only while they are empty, and a value that does not fit a list is reported but not written. Every
+  filled field is in the room's change history, and the import summary counts the rooms filled in. An archived room is
+  not changed. Two lines for the same existing room fill it once. Importing the same list twice adds and fills nothing.
 - A line without a building, a floor, or both a room number and a room name is not imported.
 - A line with more values than the header has columns is not imported (usually a comma inside a value that is not
   in quotes).
