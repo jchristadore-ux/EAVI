@@ -14,7 +14,10 @@ const CACHE = PREFIX + VERSION;
 const FILES = __FILES__;
 
 self.addEventListener('install', function (event) {
-  event.waitUntil(caches.open(CACHE).then(function (cache) { return cache.addAll(FILES); }).then(function () { return self.skipWaiting(); }));
+  /* cache: 'reload' fetches every file from the server, never from the browser's HTTP cache: a host may let the browser
+     keep a file for minutes (GitHub Pages: 10), and a new version must not be filled with the files of the previous one */
+  const fresh = FILES.map(function (f) { return new Request(f, { cache: 'reload' }); });
+  event.waitUntil(caches.open(CACHE).then(function (cache) { return cache.addAll(fresh); }).then(function () { return self.skipWaiting(); }));
 });
 self.addEventListener('activate', function (event) {
   event.waitUntil(caches.keys().then(function (keys) {

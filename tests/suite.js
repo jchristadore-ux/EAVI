@@ -1406,6 +1406,9 @@
     assert('serviceWorker' in navigator && window.isSecureContext && window.caches, 'service workers are not available in this test browser');
     const version = /const VERSION = '([0-9a-f]+)'/.exec(await (await fetch('../app/sw.js', { cache: 'no-store' })).text());
     assert(version, 'app/sw.js carries a build version (run tools\\build.ps1)');
+    const workerSource = await (await fetch('../app/sw.js', { cache: 'no-store' })).text();
+    assert(/new Request\(f, \{ cache: 'reload' \}\)/.test(workerSource) && /cache\.addAll\(fresh\)/.test(workerSource),
+      'a new version fetches its files from the server, never from the browser\'s HTTP cache');
     /* the cache is named after the folder the worker is served from, so another copy on this origin is not involved */
     const name = 'av-environment-intelligence-' + new URL('../app/', location.href).pathname + '-' + version[1];
     /* a cache left by an earlier version of this copy (under the name those versions used) */
