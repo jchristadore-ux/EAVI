@@ -81,6 +81,14 @@ powershell -ExecutionPolicy Bypass -File tools\validate-outputs.ps1   # check th
 - **Client name removed (12 November 2026):** mentions of Evercore were removed from the app, tests, tools, demo,
   schema and docs. The only remaining occurrences in code are the legacy names the on-device migration needs
   (in `app/js/store.js` and `tools/sw.template.js`).
+- **Cloud sync workspace (13 November 2026):** Supabase project `AV-Intelligence`
+  (`https://xhrcyvyxeprgybjleoku.supabase.co`, East US / North Virginia, free plan) owned by the project owner.
+  `supabase/schema.sql` ran twice without error. Public sign-ups are off. One organisation (empty name, prefix
+  AVEI) with the owner's login as admin. DEPLOYMENT.md 3.6 checks 1-10 were run in the SQL editor as simulated
+  users inside a rolled-back transaction (all 19 assertions passed, nothing left behind), and check 3 also
+  against the live REST API with the publishable key. Checks 11-14 (two real devices) are done by using it.
+  The deploy workflow builds with this origin in `connect-src` (`.github/workflows/deploy.yml`). The client's
+  approval of this cloud storage is still not recorded.
 
 ## Open items, in priority order
 

@@ -27,13 +27,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       # Windows PowerShell 5.1, the environment the build was written and tested in (not pwsh 7).
-      # Cloud sync: set the repository variable SYNC_ORIGIN (Settings -> Secrets and variables -> Actions ->
-      # Variables) to https://<project>.supabase.co. Unset or empty = device-only site. build.ps1 refuses anything
-      # but a bare https origin; the value is passed through the environment, never pasted into the script.
-      - name: Build (no demo data; cloud sync only if SYNC_ORIGIN is set)
+      # Cloud sync: the site may connect to this one Supabase project and nowhere else (Content-Security-Policy
+      # connect-src). The address is not a secret: it is in every built page. A repository variable SYNC_ORIGIN, if
+      # set, takes precedence; set it to a single space for a device-only site. build.ps1 refuses anything but a
+      # bare https origin; the value is passed through the environment, never pasted into the script.
+      - name: Build (no demo data; cloud sync to the project's Supabase workspace)
         shell: powershell
         env:
-          SYNC_ORIGIN: ${{ vars.SYNC_ORIGIN }}
+          SYNC_ORIGIN: ${{ vars.SYNC_ORIGIN || 'https://xhrcyvyxeprgybjleoku.supabase.co' }}
         run: ./tools/build.ps1 -SyncOrigin "$env:SYNC_ORIGIN"
       - name: Check that the site carries no demo seed
         shell: powershell
