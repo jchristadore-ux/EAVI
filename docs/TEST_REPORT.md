@@ -25,6 +25,9 @@ What was tested, how, with what result — and what was not. Date of this run: *
 > files from the browser's HTTP cache (GitHub Pages lets browsers keep files for 10 minutes); the worker now installs
 > with `cache: 'reload'`, and after that fix the open page reloaded into the fresh files. The build version now also
 > changes when `tools/sw.template.js` changes.
+>
+> **Later run, 13 November 2026 (room list import update mode; Presentation room type):** 61 tests; **60 pass**,
+> including the new update-mode test. *Offline shell* fails for the same browser-pane reason as above.
 
 ## 1. Summary
 

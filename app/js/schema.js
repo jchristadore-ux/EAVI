@@ -7,7 +7,7 @@
 
   /* ------------------------------------------------------------------ vocabularies */
   S.ROOM_TYPES = ['Small conference room', 'Medium conference room', 'Large conference room', 'Executive conference room', 'Boardroom',
-    'Divisible conference room', 'Multipurpose room', 'Town hall', 'Training room', 'Huddle room', 'Focus room', 'Rack room', 'Support area', 'Other'];
+    'Divisible conference room', 'Multipurpose room', 'Town hall', 'Presentation room', 'Training room', 'Huddle room', 'Focus room', 'Rack room', 'Support area', 'Other'];
   S.NON_CONFERENCE_TYPES = ['Rack room', 'Support area'];
   S.CRITICAL_TYPES = ['Executive conference room', 'Boardroom', 'Town hall'];
   S.CRITICALITY = [['standard', 'Standard'], ['high', 'High visibility'], ['critical', 'Executive / critical']];

@@ -1,8 +1,9 @@
 /* roomimport.js — load a room list (CSV) into Buildings & Floors.
  * A list is read, checked and shown as a plan before anything is written. Nothing is guessed: a value that does not
  * fit (an unknown room type, a capacity that is not a whole number) is left empty and reported, and a line that cannot
- * be placed with certainty is not imported. A room that already exists is only filled in: a field it leaves empty takes
- * the list's value; a field that already holds a value is never changed. */
+ * be placed with certainty is not imported. A room that already exists is, by default, only filled in: a field it leaves
+ * empty takes the list's value and a field that already holds a value is kept. In update mode (chosen on the import
+ * screen) every value the list gives replaces the room's current one. An empty cell never clears anything. */
 (function () {
   'use strict';
   const EV = window.EV, U = EV.U, S = EV.S, store = EV.store, A = EV.act;
@@ -118,7 +119,11 @@
     return { values: values, unfit: unfit };
   }
   const isEmpty = function (v) { return v == null || String(v).trim() === ''; };
-  RI.plan = function (parsed) {
+  const shown = function (k, v) { if (k === 'criticality') { const c = S.CRITICALITY.find(function (x) { return x[0] === v; }); if (c) return c[1]; } return String(v); };
+  /* opts.replace: an existing room takes every value the list gives, not only into empty fields ("update" mode).
+     An empty cell never clears anything in either mode. */
+  RI.plan = function (parsed, opts) {
+    const replace = !!(opts && opts.replace);
     const buildings = store.all('buildings'), floors = store.all('floors'), areas = store.all('areas'), rooms = store.all('rooms');
     const newB = new Map(), newF = new Map(), newA = new Map(), seen = new Map();
     const out = parsed.rows.map(function (r) {
@@ -169,21 +174,25 @@
         if (there.archived) { row.status = 'exists'; row.notes.push('Already on this floor (archived): not changed'); return row; }
         /* an existing room is filled in: each field it leaves empty takes the list's value; a field that already holds a
            value is never changed. Its notes are never edited, so a value that does not fit is reported, not added. */
-        const cv = convert(r), fill = {}, filled = [], set = [];
+        const cv = convert(r), fill = {}, filled = [], set = [], changed = [];
         RI.FIELDS.forEach(function (f) {
           const k = f[0];
           if (!Object.prototype.hasOwnProperty.call(cv.values, k)) return;
           if (isEmpty(there[k])) { fill[k] = cv.values[k]; filled.push(f[1]); }
-          else if (k === 'capacity' ? there[k] !== cv.values[k] : !same(there[k], cv.values[k])) set.push(f[1]);
+          else if (k === 'capacity' ? there[k] !== cv.values[k] : !same(there[k], cv.values[k])) {
+            if (replace) { fill[k] = cv.values[k]; changed.push(f[1] + ': ' + shown(k, there[k]) + ' → ' + shown(k, cv.values[k])); }
+            else set.push(f[1]);
+          }
         });
-        if (filled.length) {
+        if (filled.length || changed.length) {
           /* two lines for the same room would fill it twice, the second over the first: the room is filled once */
           const once = 'room:' + there.id;
           if (seen.has(once)) { row.status = 'duplicate'; row.notes.push('Same room as line ' + seen.get(once) + ' of this list: filled in once'); row.attention = true; return row; }
           seen.set(once, r.line);
-          row.status = 'fill'; row.target = there.id; row.fill = fill; row.fields = filled.length;
-          row.notes.push('Fills in: ' + filled.join(', '));
-        } else { row.status = 'exists'; row.notes.push('Already on this floor: nothing to fill in'); }
+          row.status = 'fill'; row.target = there.id; row.fill = fill; row.fields = filled.length + changed.length;
+          if (filled.length) row.notes.push('Fills in: ' + filled.join(', '));
+          if (changed.length) row.notes.push('Changes: ' + changed.join('; '));
+        } else { row.status = 'exists'; row.notes.push(replace ? 'Already on this floor: already matches the list' : 'Already on this floor: nothing to fill in'); }
         cv.unfit.forEach(function (u) { row.notes.push(u[0] + ' “' + u[1] + '” does not fit: not filled in'); row.attention = true; });
         if (set.length) { row.notes.push('Already set, left as it is: ' + set.join(', ')); row.attention = true; }
         return row;
@@ -204,7 +213,7 @@
       return row;
     });
     const n = function (st) { return out.filter(function (r) { return r.status === st; }).length; };
-    const plan = { parsed: parsed, rows: out, newBuildings: newB, newFloors: newF, newAreas: newA, unknown: parsed.unknown, headerNotes: parsed.headerNotes,
+    const plan = { parsed: parsed, replace: replace, rows: out, newBuildings: newB, newFloors: newF, newAreas: newA, unknown: parsed.unknown, headerNotes: parsed.headerNotes,
       counts: { rooms: n('new'), fill: n('fill'), fields: out.reduce(function (s, r) { return s + (r.fields || 0); }, 0),
         exists: n('exists'), duplicate: n('duplicate'), error: n('error'), buildings: 0, floors: 0, areas: 0,
         unfit: out.filter(function (r) { return r.status === 'new' && r.kept; }).length, noType: out.filter(function (r) { return r.status === 'new' && r.noType; }).length } };
@@ -222,9 +231,9 @@
   /* ------------------------------------------------------------------ apply */
   /* The plan is rebuilt from the list against the records as they are at this moment, so what is written is what
      would be shown now — not a plan made before something changed (another tab, a synchronisation, a first import). */
-  RI.apply = function (planOrParsed, sourceName) {
+  RI.apply = function (planOrParsed, sourceName, opts) {
     if (store.readOnly) throw new Error('This account has read-only access.');
-    const plan = RI.plan(planOrParsed.parsed || planOrParsed);
+    const plan = RI.plan(planOrParsed.parsed || planOrParsed, opts || { replace: !!planOrParsed.replace });
     const need = RI.needed(plan);
     const made = function (table, data) { return store.create(table, data); };   /* each record gets its own entry in the change history */
     const bId = new Map(), fRec = new Map(), aId = new Map();
@@ -251,35 +260,37 @@
     });
     const c = plan.counts, skipped = c.exists + c.duplicate + c.error;
     store.log({ action: 'imported', entity_type: 'rooms', summary: 'Room list imported' + (sourceName ? ' from ' + sourceName : '') + ': ' + U.plural(rooms, 'room') + ', ' + U.plural(c.floors, 'floor') + ', ' + U.plural(c.buildings, 'building') +
-      (filled ? ', ' + U.plural(filled, 'existing room') + ' filled in (' + U.plural(fields, 'field') + ')' : '') +
+      (filled ? ', ' + U.plural(filled, 'existing room') + (plan.replace ? ' updated' : ' filled in') + ' (' + U.plural(fields, 'field') + ')' : '') +
       (skipped ? ' — ' + U.plural(skipped, 'line') + ' not imported' : '') });
-    return { rooms: rooms, buildings: c.buildings, floors: c.floors, areas: c.areas, filled: filled, fields: fields };
+    return { rooms: rooms, buildings: c.buildings, floors: c.floors, areas: c.areas, filled: filled, fields: fields, replace: plan.replace };
   };
 
   /* ------------------------------------------------------------------ screen: choose a file, review the plan, import */
   RI.open = function () {
     const h = EV.h, ui = EV.ui;
-    const st = { name: '', plan: null, error: '', errorTitle: '', done: null, show: 'all', busy: false, seq: 0 };
+    const st = { name: '', plan: null, parsed: null, replace: false, error: '', errorTitle: '', done: null, show: 'all', busy: false, seq: 0 };
     const pick = function (e) {
       const file = e.target.files && e.target.files[0]; e.target.value = '';
       if (!file) return undefined;
       const mine = ++st.seq;
-      st.error = ''; st.plan = null; st.done = null; st.name = file.name; st.show = 'all';
-      return file.text().then(function (text) { if (mine === st.seq) st.plan = RI.plan(RI.read(text)); })
+      st.error = ''; st.plan = null; st.parsed = null; st.done = null; st.name = file.name; st.show = 'all';
+      return file.text().then(function (text) { if (mine === st.seq) { st.parsed = RI.read(text); st.plan = RI.plan(st.parsed, { replace: st.replace }); } })
         .catch(function (err) { if (mine === st.seq) { st.errorTitle = 'This file cannot be imported'; st.error = (err && err.message) || 'The file could not be read.'; } });
     };
     const tone = { 'new': 'ok', fill: 'accent', exists: 'muted', duplicate: 'muted', error: 'danger' }, word = { 'new': 'Import', fill: 'Fill in', exists: 'Exists', duplicate: 'Repeated', error: 'Not imported' };
     const needsLook = function (r) { return r.status === 'error' || r.status === 'duplicate' || r.attention || r.noType || (r.status === 'new' && r.notes.length > 0); };
-    const goLabel = function (c) { return [c.rooms ? 'Import ' + U.plural(c.rooms, 'room') : '', c.fill ? 'Fill in ' + U.plural(c.fill, 'room') : ''].filter(Boolean).join(', ').replace(', Fill', ', fill') || 'Nothing to import'; };
+    const goLabel = function (c, replace) { return [c.rooms ? 'Import ' + U.plural(c.rooms, 'room') : '', c.fill ? (replace ? 'Update ' : 'Fill in ') + U.plural(c.fill, 'room') : ''].filter(Boolean).join(', ').replace(', Fill', ', fill').replace(', Update', ', update') || 'Nothing to import'; };
+    const setMode = function (v) { st.replace = v === 'replace'; if (st.parsed && !st.done) st.plan = RI.plan(st.parsed, { replace: st.replace }); };
     const sheet = ui.openSheet({
       title: 'Import a room list', sub: 'CSV file — one line per room', size: 'wide',
       render: function () {
         const p = st.plan, c = p && p.counts;
+        word.fill = st.replace ? 'Update' : 'Fill in';
         const rows = p ? p.rows.filter(function (r) { return st.show === 'all' || (st.show === 'attention' ? needsLook(r) : r.status === st.show); }) : [];
         return h('div.stack', null,
           store.readOnly ? ui.note('warn', 'This account has read-only access: a room list can be checked here, but not imported.') : null,
           st.done ? ui.note('ok', 'Imported ' + U.plural(st.done.rooms, 'room') + ', ' + U.plural(st.done.floors, 'floor') + ', ' + U.plural(st.done.areas, 'area') + ' and ' + U.plural(st.done.buildings, 'building') + '.' +
-            (st.done.filled ? ' Filled in ' + U.plural(st.done.fields, 'empty field') + ' on ' + U.plural(st.done.filled, 'existing room') + '.' : ''), { title: 'Room list imported' }) : null,
+            (st.done.filled ? (st.done.replace ? ' Updated ' + U.plural(st.done.fields, 'field') : ' Filled in ' + U.plural(st.done.fields, 'empty field')) + ' on ' + U.plural(st.done.filled, 'existing room') + '.' : ''), { title: 'Room list imported' }) : null,
           !p && !st.done ? [h('p.muted', { key: 'a' }, 'The first line names the columns. Needed: Building, Floor, and Room number or Room name. From Excel, save the sheet as “CSV UTF-8”.'),
             h('div.kv-list', { key: 'b' }, RI.COLUMNS.filter(function (x) { return ['building', 'floor', 'number', 'name'].indexOf(x[0]) < 0; }).map(function (x) { return ui.kv(x[1], x[3]); }))] : null,
           st.error ? ui.note('danger', st.error, { title: st.errorTitle }) : null,
@@ -287,17 +298,21 @@
             h('label.btn.btn-secondary.capture', { 'for': 'room-list-file', role: 'button' }, EV.icon('upload', 17), h('span', null, p ? 'Choose another file' : 'Choose CSV file'),
               h('input', { id: 'room-list-file', type: 'file', accept: '.csv,text/csv,text/plain', 'class': 'file-input', tabindex: '-1', onchange: pick })),
             ui.btn('Download template', { icon: 'download', kind: 'ghost', onclick: function () { return EV.saveFile(RI.template(), 'room_list_template.csv', 'text/csv').then(function (r) { if (!r.ok) EV.toast(r.message || 'The template could not be saved here.', 'warn'); }); } })),
+          st.done ? null : ui.field('Rooms that already exist', ui.select(st.replace ? 'replace' : 'fill', [['fill', 'Fill in empty fields only'], ['replace', 'Update to the list’s values']],
+            { empty: false, id: 'room-import-mode', onchange: setMode }), { hint: st.replace ? 'Every value in the list replaces the room’s current value. An empty cell changes nothing. Each change is listed below and kept in the room’s change history.'
+              : 'Only fields that are still empty are filled. Values already set are kept.' }),
           p && !st.done ? [
             h('div.tiles', { key: 't' },
               ui.stat({ key: 'n', label: 'Rooms to import', value: c.rooms, tone: c.rooms ? 'ok' : null, sub: c.buildings + ' new buildings · ' + c.floors + ' new floors · ' + c.areas + ' new areas' }),
-              ui.stat({ key: 'f', label: 'Rooms to fill in', value: c.fill, tone: c.fill ? 'accent' : null, sub: U.plural(c.fields, 'empty field') + ' · values already set are kept' }),
-              ui.stat({ key: 'e', label: 'Already present', value: c.exists, sub: c.duplicate ? 'Nothing to fill in · ' + c.duplicate + ' repeated in this list' : 'Nothing to fill in' }),
+              ui.stat({ key: 'f', label: st.replace ? 'Rooms to update' : 'Rooms to fill in', value: c.fill, tone: c.fill ? 'accent' : null,
+                sub: st.replace ? U.plural(c.fields, 'field') + ' to set or change' : U.plural(c.fields, 'empty field') + ' · values already set are kept' }),
+              ui.stat({ key: 'e', label: 'Already present', value: c.exists, sub: (st.replace ? 'Already match the list' : 'Nothing to fill in') + (c.duplicate ? ' · ' + c.duplicate + ' repeated in this list' : '') }),
               ui.stat({ key: 'x', label: 'Lines not imported', value: c.error, tone: c.error ? 'danger' : null, sub: 'The reason is on each line' })),
             c.unfit ? ui.note('warn', U.plural(c.unfit, 'room') + ' will be imported with a value left empty because it does not fit. Nothing is guessed: the original text is kept in the room’s notes.', { key: 'w' }) : null,
             c.noType ? ui.note('info', U.plural(c.noType, 'room') + ' will be imported without a room type and listed as incomplete until one is chosen.', { key: 'y' }) : null,
             p.headerNotes.length ? ui.note('info', 'Column names: ' + p.headerNotes.join('; ') + '.', { key: 'hn' }) : null,
             p.unknown.length ? ui.note('info', 'Columns that are not used: ' + p.unknown.join(', ') + '.', { key: 'u' }) : null,
-            h('div.toolbar', { key: 'f' }, ui.select(st.show, [['all', 'All lines (' + p.rows.length + ')'], ['attention', 'Lines needing attention'], ['new', 'To import'], ['fill', 'To fill in'], ['exists', 'Already present'], ['duplicate', 'Repeated in this list'], ['error', 'Not imported']],
+            h('div.toolbar', { key: 'f' }, ui.select(st.show, [['all', 'All lines (' + p.rows.length + ')'], ['attention', 'Lines needing attention'], ['new', 'To import'], ['fill', st.replace ? 'To update' : 'To fill in'], ['exists', 'Already present'], ['duplicate', 'Repeated in this list'], ['error', 'Not imported']],
               { empty: false, aria: 'Show', onchange: function (v) { st.show = v; } })),
             h('div.list', { key: 'l' }, rows.slice(0, 300).map(function (r) {
               return h('div.row', { key: 'r' + r.line },
@@ -312,7 +327,7 @@
         const p = st.plan;
         return [h('span.grow', { key: 'g' }),
           ui.btn(st.done ? 'Done' : 'Cancel', { key: 'c', kind: st.done ? 'primary' : 'ghost', onclick: function () { ui.closeSheet(sheet); } }),
-          p && !st.done ? ui.btn(st.busy ? 'Importing…' : goLabel(p.counts), { key: 'i', kind: 'primary', icon: 'check', id: 'room-import-go', disabled: st.busy || store.readOnly || !(p.counts.rooms || p.counts.fill), onclick: function () {
+          p && !st.done ? ui.btn(st.busy ? 'Importing…' : goLabel(p.counts, p.replace), { key: 'i', kind: 'primary', icon: 'check', id: 'room-import-go', disabled: st.busy || store.readOnly || !(p.counts.rooms || p.counts.fill), onclick: function () {
             /* one import per plan: a second tap, or a retry after a failure, never writes the same list twice */
             if (st.busy || st.done || !st.plan) return;
             st.busy = true;

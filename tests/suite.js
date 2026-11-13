@@ -62,7 +62,7 @@
     let n = 0; S.TEST_CATEGORIES.forEach(function (c) { n += S.TESTS[c].length; });
     eq(n, 52, 'functional test catalogue size');
     eq(S.NETWORK_CHECKS.length, 11, 'network validation checklist size');
-    eq(S.DEVICE_CATEGORIES.length, 24); eq(S.PHOTO_CATEGORIES.length, 13); eq(S.BACKLOG_STATUSES.length, 12); eq(S.FINDING_CATEGORIES.length, 10); eq(S.ROOM_TYPES.length, 14);
+    eq(S.DEVICE_CATEGORIES.length, 24); eq(S.PHOTO_CATEGORIES.length, 13); eq(S.BACKLOG_STATUSES.length, 12); eq(S.FINDING_CATEGORIES.length, 10); eq(S.ROOM_TYPES.length, 15);
   });
   test('validation helpers: IP and MAC formats', function () {
     assert(R.ipValid('192.0.2.21')); assert(!R.ipValid('192.0.2.256')); assert(!R.ipValid('192.0.2')); assert(R.ipValid('2001:db8::1'));
@@ -1654,7 +1654,7 @@
     eq(['buildings', 'floors', 'areas', 'rooms'].map(function (t) { return store.all(t).length - before[t]; }), [0, 0, 0, 0], 'planning writes nothing');
     const createdBefore = store.all('activity_log').filter(function (l) { return l.action === 'created'; }).length;
     const done = RI.apply(plan, 'rooms.csv');
-    eq(done, { rooms: 3, buildings: 1, floors: 2, areas: 1, filled: 0, fields: 0 });
+    eq(done, { rooms: 3, buildings: 1, floors: 2, areas: 1, filled: 0, fields: 0, replace: false });
     eq(['buildings', 'floors', 'areas', 'rooms'].map(function (t) { return store.all(t).length - before[t]; }), [1, 2, 1, 3]);
     const tower = store.all('buildings').find(function (b) { return b.name === 'Import Tower'; });
     const room = function (n) { return store.all('rooms').find(function (r) { return r.building_id === tower.id && (r.number === n || r.name === n); }); };
@@ -1727,6 +1727,31 @@
     const again = RI.plan(RI.read(csv));
     eq([again.counts.fill, again.counts.rooms], [0, 0], 'the same list a second time fills nothing and adds nothing');
     eq(X.validate(X.collect(X.resolveScope({ mode: 'full' })), null, null).structural_errors, 0, 'filled records export cleanly');
+  });
+  test('room list import in update mode: the list\'s values replace those already set, an empty cell changes nothing, every change is shown and logged', function () {
+    const RI = EV.roomImport;
+    const tower = store.all('buildings').find(function (b) { return b.name === 'Fill Tower'; });
+    const room = function (n) { return store.all('rooms').find(function (r) { return r.building_id === tower.id && r.number === n; }); };
+    eq([room('7A').room_type, room('7A').capacity, room('7A').criticality, room('7B').display_config], ['Huddle room', 4, '', 'Existing display'], 'starting point (from the fill-in test)');
+    const csv = 'Building,Floor,Room number,Room type,Capacity,Criticality,Display configuration\r\n' +
+      'Fill Tower,7,7A,Presentation room,,Executive / critical,Samsung 55\r\n' +
+      'Fill Tower,7,7B,,,,Replaced display\r\n';
+    const parsed = RI.read(csv);
+    const fillOnly = RI.plan(parsed);
+    eq([fillOnly.rows.map(function (r) { return r.status; }), fillOnly.counts.fields], [['fill', 'exists'], 1], 'by default only the empty criticality of 7A would be filled');
+    const plan = RI.plan(parsed, { replace: true });
+    eq([plan.replace, plan.rows.map(function (r) { return r.status; }), plan.counts.fill, plan.counts.fields], [true, ['fill', 'fill'], 2, 3], 'in update mode 7A and 7B are updated: 3 fields');
+    assert(plan.rows[0].notes.indexOf('Changes: Room type: Huddle room → Presentation room') >= 0 && plan.rows[0].notes.indexOf('Fills in: Criticality') >= 0, 'each change is shown from → to: ' + plan.rows[0].notes.join(' | '));
+    assert(plan.rows[1].notes.some(function (n) { return n === 'Changes: Display configuration: Existing display → Replaced display'; }), plan.rows[1].notes.join(' | '));
+    const done = RI.apply(plan, 'update.csv');
+    eq([done.filled, done.fields, done.replace], [2, 3, true]);
+    eq([room('7A').room_type, room('7A').capacity, room('7A').criticality, room('7A').display_config, room('7B').display_config, room('7B').capacity],
+      ['Presentation room', 4, 'critical', 'Samsung 55', 'Replaced display', 6], 'values replaced; empty cells left capacity and the rest as they were');
+    const history = JSON.stringify(store.all('activity_log').filter(function (l) { return l.entity_id === room('7B').id; }).map(function (l) { return l.changes; }));
+    /* (the store folds changes made right after a record was created into its creation entry, so only the new value is checked) */
+    assert(history.indexOf('"f":"display_config","from":"","to":"Replaced display"') >= 0 || history.indexOf('"from":"Existing display","to":"Replaced display"') >= 0, 'the change is in the room\'s history: ' + history);
+    assert(store.all('activity_log').some(function (l) { return l.action === 'imported' && /2 existing rooms updated \(3 fields\)/.test(l.summary); }), 'and the import summary says updated');
+    eq(RI.plan(RI.read(csv), { replace: true }).counts.fill, 0, 'the same list again changes nothing');
   });
   test('the production site carries no demo data: no demo records, no seed file, no control that offers them', async function () {
     const page = await (await fetch('../app/index.html', { cache: 'no-store' })).text();
