@@ -97,6 +97,9 @@ img { max-width: 100%; }
 .demo-banner-hosted { align-items: flex-start; }
 .demo-banner-hosted span { white-space: normal; overflow: visible; }
 .status-banner { flex: none; display: flex; align-items: flex-start; gap: 8px; padding: 8px var(--gut-r) 8px var(--gut-l); background: var(--danger-weak); border-bottom: 1px solid rgba(242, 103, 95, 0.3); color: #ffc0bb; font-size: 13px; }
+.update-banner { background: var(--accent-weak); border-bottom-color: rgba(61, 139, 255, 0.3); color: var(--accent-strong); align-items: center; }
+.update-banner span { flex: 1; }
+.update-banner .link { padding: 0 2px; }
 .link { background: none; border: 0; padding: 4px 2px; color: var(--accent-strong); font-weight: 600; font-size: inherit; text-decoration: underline; text-underline-offset: 3px; }
 .save-pill { display: inline-flex; align-items: center; gap: 6px; min-height: 30px; padding: 0 10px; border-radius: 15px; border: 1px solid var(--line-strong); background: var(--raised); font-size: 12px; font-weight: 600; color: var(--text-2); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .save-ok .ic { color: var(--ok); }

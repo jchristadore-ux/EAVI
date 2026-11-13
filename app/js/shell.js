@@ -224,6 +224,7 @@
           : store.hasDemo() ? h('div.demo-banner', null, h('strong', null, 'DEMO DATA'), h('span', null, 'Synthetic records for evaluation. Not a real environment.'),
             h('button.link', { type: 'button', onclick: function () { EV.go('/settings'); } }, 'Manage')) : null,
           store.save.error ? h('div.status-banner', null, icon('alert', 15), h('span', null, store.save.error)) : null,
+          EV.update ? EV.update.banner() : null,
           h('main.main', { id: 'main-scroll' }, h('div', { 'class': 'page page-' + r.page, key: r.page + ':' + (r.id || '') }, content)),
           bottomNav(r))),
       h('div.overlays', null, ui.renderOverlays())
@@ -251,7 +252,63 @@
     setInterval(function () { EV.redraw(); }, 30000); /* keeps relative times and the save indicator current */
     const dev = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
     if (!EV.env.embedded && !EV.env.hosted && 'serviceWorker' in navigator && EV.env.secure && (!dev || /[?&]sw=1/.test(location.search))) {
-      navigator.serviceWorker.register('./sw.js').catch(function (e) { console.warn('[sw] registration failed', e); });
+      const swc = navigator.serviceWorker;
+      upd.announce();
+      swc.addEventListener('message', function (ev) { if (ev.data && ev.data.type === 'version') { upd.version = String(ev.data.version || ''); EV.redraw(); } });
+      const ask = function () { if (swc.controller) swc.controller.postMessage('version'); };
+      ask();
+      /* a page that had no worker yet is already running the files the first worker caches: no switch is needed */
+      let hadController = !!swc.controller;
+      swc.addEventListener('controllerchange', function () {
+        ask();
+        if (!hadController) { hadController = true; return; }
+        upd.ready = true; EV.redraw();
+        upd.whenSafe();
+      });
+      swc.register('./sw.js').then(function (reg) {
+        const check = function () { try { reg.update().catch(function () { /* offline: try again later */ }); } catch (e) { /* ignore */ } };
+        /* an iPhone home-screen app is resumed, not restarted: look for a new version every time it is returned to */
+        document.addEventListener('visibilitychange', function () { if (!document.hidden) check(); upd.apply(); });
+        window.addEventListener('online', check);
+        setInterval(check, 60 * 60 * 1000);
+      }).catch(function (e) { console.warn('[sw] registration failed', e); });
     }
+  };
+
+  /* ------------------------------------------------------------------ application updates */
+  /* A new version is installed in the background by the service worker. The page then switches to it by itself, at a
+     moment when nothing is being worked on: no editor or dialog open, no field being typed in, every change saved.
+     Until then a banner says an update is ready, with a button to load it at once. */
+  const upd = EV.update = { ready: false, applying: false, version: '', timer: 0 };
+  upd.reload = function () { location.reload(); };
+  upd.safe = function () {
+    const a = document.activeElement;
+    const typing = !!a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.tagName === 'SELECT' || a.isContentEditable);
+    return !ui.sheets.length && !ui.dialog && !typing && !store.save.pending;
+  };
+  upd.apply = function (now) {
+    if (!upd.ready || upd.applying || (!now && !upd.safe())) return false;
+    upd.applying = true;
+    clearInterval(upd.timer);
+    try { sessionStorage.setItem('ev.updated', '1'); } catch (e) { /* ignore */ }
+    Promise.resolve(store.flush()).catch(function () { /* the write queue keeps its own retry */ }).then(function () { upd.reload(); });
+    return true;
+  };
+  upd.whenSafe = function () {
+    if (upd.apply()) return;
+    clearInterval(upd.timer);
+    upd.timer = setInterval(function () { upd.apply(); }, 3000);
+  };
+  /* after the switch: say so once */
+  upd.announce = function () {
+    let was = false;
+    try { was = sessionStorage.getItem('ev.updated') === '1'; sessionStorage.removeItem('ev.updated'); } catch (e) { /* ignore */ }
+    if (was) EV.toast('Updated to the latest version', 'ok', 4000);
+  };
+  upd.banner = function () {
+    if (!upd.ready || upd.applying) return null;
+    return h('div.status-banner.update-banner', null, icon('download', 15),
+      h('span', null, 'A new version is ready. It loads by itself when you finish what is open.'),
+      h('button.link', { type: 'button', onclick: function () { upd.apply(true); } }, 'Load now'));
   };
 })();

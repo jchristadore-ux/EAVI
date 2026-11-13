@@ -16,6 +16,10 @@ What was tested, how, with what result — and what was not. Date of this run: *
 > **Later run, 13 November 2026 (room list import fills in existing rooms, space summary columns):** 59 tests; **58
 > pass**, including the new fill-in test and the updated import test. The one failure is again *offline shell*, for the
 > same browser-pane reason as above.
+>
+> **Later run, 13 November 2026 (automatic switch to a new version):** 60 tests; **59 pass**, including the new
+> *application updates* test. *Offline shell* fails for the same browser-pane reason, so its new check that the worker
+> reports its version is not verified by this run.
 
 ## 1. Summary
 

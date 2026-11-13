@@ -22,6 +22,10 @@ self.addEventListener('activate', function (event) {
     return Promise.all(keys.filter(function (k) { return (k.indexOf(PREFIX) === 0 && k !== CACHE) || k.indexOf(LEGACY_PREFIX) === 0; }).map(function (k) { return caches.delete(k); }));
   }).then(function () { return self.clients.claim(); }));
 });
+/* the page asks which version it is running (shown in Settings) */
+self.addEventListener('message', function (event) {
+  if (event.data === 'version' && event.source) event.source.postMessage({ type: 'version', version: VERSION });
+});
 self.addEventListener('fetch', function (event) {
   const req = event.request;
   if (req.method !== 'GET') return;

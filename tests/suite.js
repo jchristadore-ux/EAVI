@@ -1418,6 +1418,13 @@
       eq(worker.state, 'activated', 'the service worker installed (one missing file in its list makes the whole installation fail)');
       assert((await caches.keys()).indexOf(name) >= 0, 'the application cache exists: ' + name);
       assert((await caches.keys()).indexOf(oldCache) < 0, 'the cache of an earlier version is removed');
+      /* Settings shows the version the worker reports */
+      const answer = new Promise(function (res) {
+        const on = function (e) { if (e.data && e.data.type === 'version') { navigator.serviceWorker.removeEventListener('message', on); res(e.data.version); } };
+        navigator.serviceWorker.addEventListener('message', on); setTimeout(function () { res(null); }, 3000);
+      });
+      reg.active.postMessage('version');
+      eq(await answer, version[1], 'the worker answers with its own version');
       const cache = await caches.open(name);
       const html = await (await fetch('../app/index.html', { cache: 'no-store' })).text();
       const need = ['index.html'];
@@ -1853,6 +1860,43 @@
     await wait(200);
     eq(await dbExists(oldDb), false, 'the old database is deleted once the move has finished');
     await dropDb(newDb);
+  });
+
+  test('application updates: a new version loads by itself only when no editor or dialog is open, nothing is typed in and every change is saved; Load now works at once', async function () {
+    const upd = EV.update, realReload = upd.reload, ui = EV.ui;
+    let reloaded = 0;
+    upd.reload = function () { reloaded++; };
+    try {
+      upd.ready = false; upd.applying = false;
+      eq([upd.apply(), upd.banner()], [false, null], 'nothing happens while no update is ready');
+      upd.ready = true;
+      const s = ui.openSheet({ title: 'Open editor', render: function () { return EV.h('div', null, 'x'); } });
+      assert(!upd.safe() && !upd.apply() && upd.banner(), 'an open editor holds the switch back, and the banner says an update is ready');
+      ui.closeSheet(s);
+      store.kvSet('update-test', 1);
+      assert(!upd.safe(), 'so does a change that is not saved yet');
+      await store.flush();
+      if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+      assert(upd.safe(), 'with nothing open and everything saved it is safe');
+      assert(upd.apply(), 'and the new version loads');
+      await wait(50);
+      eq(reloaded, 1, 'the page reloads once');
+      eq(upd.apply(), false, 'a second request does not reload again');
+      let flag = null; try { flag = sessionStorage.getItem('ev.updated'); } catch (e) { flag = '1'; }
+      eq(flag, '1', 'the reloaded page is told it was updated');
+      upd.announce();
+      assert(ui.toasts.some(function (t) { return /Updated to the latest version/.test(t.msg); }), 'and says so once');
+      upd.applying = false;
+      const s2 = ui.openSheet({ title: 'Open editor', render: function () { return EV.h('div', null, 'x'); } });
+      assert(upd.apply(true), 'Load now does not wait');
+      await wait(50);
+      eq(reloaded, 2);
+      ui.closeSheet(s2);
+    } finally {
+      upd.reload = realReload; upd.ready = false; upd.applying = false; clearInterval(upd.timer);
+      store.kvDel('update-test');
+      try { sessionStorage.removeItem('ev.updated'); } catch (e) { /* ignore */ }
+    }
   });
 
   test('the application names no client: outside the legacy names the move needs, no file it loads mentions one', async function () {

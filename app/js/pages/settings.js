@@ -199,7 +199,8 @@
               : EV.env.embedded ? 'This copy is running inside a hosted frame: offline use and home-screen installation are available only from a dedicated web address.' : EV.env.standalone ? 'Running as an installed app.' : 'Running in a browser tab.')),
 
           ui.card({ key: 'about', title: 'About and approvals' },
-            h('div.kv-list', null, ui.kv('Application', EV.APP.short), ui.kv('Version', EV.APP.version + ' (' + EV.APP.build + ')'), ui.kv('Export package format', EV.APP.exportFormat),
+            h('div.kv-list', null, ui.kv('Application', EV.APP.short), ui.kv('Version', EV.APP.version + (EV.update && EV.update.version ? ' · build ' + EV.update.version : ' (' + EV.APP.build + ')')),
+              EV.update && EV.update.ready ? ui.kv('Update', 'A new version is ready and loads when nothing is open') : null, ui.kv('Export package format', EV.APP.exportFormat),
               ui.kv('Third-party code', 'None — no external libraries, fonts or requests')),
             EV.env.hosted ? ui.note('info', 'This copy is published as a private page on claude.ai so that the application can be tried with its synthetic demo data. It is an evaluation build prepared for an AV audit engagement: it is not a client system, it has not been approved by any client, and it is not the deployment described in the documentation. What you enter here is stored in this browser only; other people who open the page do not see it.', { title: 'Demonstration copy' }) : null,
             ui.note('warn', 'Real client infrastructure information may be entered only after this application and its hosting have been approved through the client\'s security review.', { title: 'Approval required before production use' }),

@@ -173,8 +173,11 @@ Per auditor device (details and the reasons are in [MOBILE_GUIDE.md](MOBILE_GUID
 1. Change the source, run the test suite (`tests/tests.html` through `tools\serve.ps1`; see
    [TEST_REPORT.md](TEST_REPORT.md)) and `tools\validate-outputs.ps1`.
 2. `tools\build.ps1` (with the same `-SyncOrigin` as before, if any) and upload `dist\site\`.
-3. Installed copies fetch the new service worker the next time they are opened with a connection, and use the new
-   version from the following start. Data on the device is not touched by an update.
+3. Installed copies look for a new version whenever they are opened or returned to with a connection (an iPhone
+   home-screen app is usually resumed, not restarted). The new version installs in the background and the page switches
+   to it by itself as soon as no editor or dialog is open, nothing is being typed and every change is saved; until then
+   a banner offers *Load now*. *Settings → About* shows the build that is running. Data on the device is not touched by
+   an update.
 
 The on-device database has a version number (`DB_VERSION` in `app/js/store.js`). Adding a table means raising it;
 that has not been needed so far, and there is no migration code beyond creating missing object stores.

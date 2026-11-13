@@ -69,5 +69,5 @@ headers listed in DEPLOYMENT.md §2 (the page's own Content-Security-Policy stil
 - On each iPhone: open the address in Safari, *Share → Add to Home Screen*, and work only from that icon
   ([MOBILE_GUIDE.md](MOBILE_GUIDE.md)). Data belongs to the address: do not change it later.
 - Load the room list: [ROOM_LIST.md](ROOM_LIST.md).
-- Every later push to `main` redeploys. Installed copies fetch a new build the next time they are opened with a
-  connection and use it from the following start.
+- Every later push to `main` redeploys. Installed copies pick up the new build when they are next opened or returned
+  to with a connection, and switch to it by themselves once nothing is open (see DEPLOYMENT.md §5).
