@@ -10,7 +10,7 @@
     short: 'AV Environment Intelligence',
     tagline: 'See the environment. Understand the infrastructure. Improve the experience.',
     version: '1.0.0',
-    build: '2026-11-12',
+    build: '2026-11-13',
     exportFormat: '1.0'
   };
 
