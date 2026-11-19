@@ -37,9 +37,9 @@
     const base = function () { return String(cfg().supabase.url).replace(/\/+$/, ''); };
     const key = function () { return cfg().supabase.anonKey; };
     async function fail(res) {
-      let msg = res.status + ' ' + res.statusText;
-      try { const j = await res.json(); msg = j.message || j.msg || j.error_description || j.error || msg; } catch (e) { /* not JSON */ }
-      const err = new Error(msg); err.status = res.status;
+      let msg = res.status + ' ' + res.statusText, code = '';
+      try { const j = await res.json(); msg = j.message || j.msg || j.error_description || j.error || msg; code = typeof j.code === 'string' ? j.code : ''; } catch (e) { /* not JSON */ }
+      const err = new Error(msg); err.status = res.status; err.code = code;
       throw err;
     }
     async function refresh() {
@@ -113,6 +113,11 @@
       downloadPhoto: async function (path) {
         const res = await call('/storage/v1/object/authenticated/' + BUCKET + '/' + path);
         return res.blob();
+      },
+      /* a server function of the workspace (supabase/functions), called as the signed-in user */
+      invoke: async function (name, opts) {
+        const res = await call('/functions/v1/' + name, opts || {});
+        return res.json();
       },
       probe: async function (url, anonKey) {
         const res = await fetch(String(url).replace(/\/+$/, '') + '/auth/v1/settings', { headers: { apikey: anonKey } });
@@ -230,6 +235,10 @@
     TABLES.forEach(function (t) { store.raw(t).forEach(function (r) { if (!r.org_id || r.org_id === old) store.applyRemote(t, Object.assign({}, r, { org_id: orgId })); }); });
   };
   /* Test hook: run the engine against any object implementing upsert / fetchSince / uploadPhoto / downloadPhoto. */
+  sync.invoke = function (name, opts) {
+    if (!sync.adapter || !sync.adapter.invoke) return Promise.reject(Object.assign(new Error('No cloud workspace is connected.'), { code: 'no_workspace' }));
+    return sync.adapter.invoke(name, opts);
+  };
   sync.useAdapter = function (adapter) { sync.adapter = adapter; store.syncEnabled = !!adapter; if (adapter) store.outbox.markAll(); };
 
   /* ------------------------------------------------------------------ engine */
@@ -470,7 +479,10 @@
       if (n) EV.rules.reconcileFollowups();
     } catch (e) {
       console.warn('[sync]', e);
-      sync.error = e.status === 401 || e.status === 403 ? 'Access was refused by the workspace (' + (e.message || e.status) + ').' : (e.message || String(e));
+      /* a workspace database made from an earlier version lacks the newer tables or columns: say what to do */
+      const old = /does not exist|could not find the .* (column|table)|schema cache/i.test((e && e.message) || '') || e.code === 'PGRST204' || e.code === 'PGRST205' || e.code === '42P01' || e.code === '42703';
+      sync.error = old ? 'The workspace database is older than this version of the application (' + (e.message || e.status) + '). Nothing is lost: changes stay queued on this device. The workspace administrator runs the current supabase/schema.sql in the Supabase SQL editor (it only adds), then sync resumes.'
+        : e.status === 401 || e.status === 403 ? 'Access was refused by the workspace (' + (e.message || e.status) + ').' : (e.message || String(e));
     }
     sync.running = false; EV.redraw();
     return !sync.error;

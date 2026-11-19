@@ -17,10 +17,20 @@
   S.DSP_PLATFORMS = ['Q-SYS', 'Biamp Tesira', 'Shure IntelliMix', 'ClearOne', 'Crestron', 'Integrated (bar / codec)', 'None', 'Other'];
   S.SCHED_PLATFORMS = ['Zoom Rooms Scheduling Display', 'Microsoft Teams Panel', 'Crestron scheduling panel', 'Outlook / Exchange only', 'Robin', 'Evoko', 'None', 'Other'];
 
-  S.DEVICE_CATEGORIES = ['AV processor', 'DSP', 'Video conferencing codec', 'Zoom Room appliance', 'Microsoft Teams Room appliance', 'Camera',
-    'Microphone processor', 'Microphone endpoint', 'Loudspeaker amplifier', 'Network switch', 'Touch panel', 'Display', 'Video wall controller',
-    'Video extender', 'HDMI transmitter', 'HDMI receiver', 'USB extender', 'Room scheduling panel', 'Wireless presentation system',
-    'Digital signage player', 'Control processor', 'Power distribution unit', 'UPS', 'Other'];
+  /* Device categories, grouped for the inventory screens. Every name used by earlier versions is kept, so a stored
+     category always stays valid; administrators can add their own and hide built-in ones (table asset_taxonomy). */
+  S.CATEGORY_GROUPS = [
+    ['Audio', ['DSP', 'Audio processor', 'Loudspeaker amplifier', 'Microphone processor', 'Microphone endpoint', 'Ceiling microphone array',
+      'Wireless microphone system', 'Loudspeaker']],
+    ['Video & display', ['Display', 'Projector', 'Video processor', 'Video switcher', 'Video wall controller', 'Camera', 'Capture device', 'Digital signage player']],
+    ['Conferencing', ['Video conferencing codec', 'Room collaboration system', 'Zoom Room appliance', 'Microsoft Teams Room appliance', 'Wireless presentation system']],
+    ['Control', ['Control processor', 'AV processor', 'Touch panel', 'Room scheduling panel']],
+    ['Signal distribution', ['AV-over-IP encoder', 'AV-over-IP decoder', 'AV-over-IP encoder/decoder', 'HDMI transmitter', 'HDMI receiver', 'Video extender',
+      'USB extender', 'KVM system']],
+    ['Network & power', ['Network switch', 'Power distribution unit', 'UPS']],
+    ['Other', ['Other']]
+  ];
+  S.DEVICE_CATEGORIES = [].concat.apply([], S.CATEGORY_GROUPS.map(function (g) { return g[1]; }));
   /* Categories whose loss takes a room out of service — used for spare-coverage risk. */
   S.ROOM_CRITICAL_CATEGORIES = ['AV processor', 'DSP', 'Video conferencing codec', 'Zoom Room appliance', 'Microsoft Teams Room appliance',
     'Control processor', 'Touch panel', 'Camera', 'Microphone processor'];
@@ -28,7 +38,7 @@
     'Samsung', 'LG', 'Sony', 'Planar', 'Barco', 'Mersive', 'Lenovo', 'Dell', 'HP', 'AMX', 'Netgear', 'Aruba', 'APC', 'Middle Atlantic', 'Vaddio',
     'AVer', 'Panasonic', 'Epson', 'Atlona', 'Kramer', 'Lightware', 'BrightSign', 'Audinate', 'Yamaha', 'Bose', 'JBL'];
   S.ID_STATUS = [['verified_onsite', 'Verified onsite'], ['verified_mgmt', 'Verified from management system'], ['awaiting_it', 'Awaiting IT confirmation'],
-    ['awaiting_vendor', 'Awaiting vendor confirmation'], ['unknown', 'Unknown'], ['not_applicable', 'Not applicable']];
+    ['awaiting_vendor', 'Awaiting vendor confirmation'], ['unknown', 'Unknown'], ['unavailable', 'Not accessible / unavailable'], ['not_applicable', 'Not applicable']];
   S.CONNECTION_TYPES = ['Wired — Ethernet', 'Wired — fiber', 'Wi-Fi', 'USB only', 'Serial / RS-232', 'HDBaseT', 'Not networked', 'Unknown'];
   S.YES_NO_UNKNOWN = ['Yes', 'No', 'Unknown'];
   S.POE_CLASSES = ['PoE (802.3af, class 0–3)', 'PoE+ (802.3at, class 4)', 'PoE++ (802.3bt, class 5–6)', 'PoE++ (802.3bt, class 7–8)', 'Not PoE', 'Unknown'];
@@ -92,7 +102,22 @@
   S.NETWORK_CHECK_STATUS = [['verified', 'Verified'], ['issue', 'Issue found'], ['awaiting_it', 'Awaiting IT'], ['na', 'Not applicable'], ['not_checked', 'Not checked']];
 
   S.PHOTO_CATEGORIES = ['Room overview', 'Display(s)', 'Camera(s)', 'Microphone(s)', 'Touch panel', 'Table connectivity', 'Rack overview', 'Rack elevation',
-    'Device rear panels', 'Equipment labels', 'Cable terminations', 'Network switches', 'Other'];
+    'Device front', 'Device rear panels', 'Equipment labels', 'Network port labels', 'Cable terminations', 'Network switches', 'Other'];
+
+  /* ------------------------------------------------------------------ asset inventory vocabularies */
+  /* What a photograph taken while identifying a device shows: [key, label, photo category] */
+  S.PHOTO_ROLES = [['front', 'Front', 'Device front'], ['rear', 'Rear panel', 'Device rear panels'], ['label', 'Label / sticker', 'Equipment labels'],
+    ['ports', 'Port labels', 'Network port labels'], ['other', 'Other', 'Other']];
+  /* Where a value in an asset record came from. Network discovery is listed so imported records can say so; this
+     application never scans a network. */
+  S.FIELD_SOURCES = [['ai', 'AI image recognition'], ['label', 'Read from label photograph'], ['manual', 'Entered manually'], ['existing', 'Existing record'],
+    ['import', 'Imported'], ['network', 'Network discovery']];
+  S.VERIFICATION = [['ai_review', 'AI identified — awaiting review'], ['verified', 'Manually verified'], ['partial', 'Partially verified'],
+    ['needs_identification', 'Needs identification'], ['exported', 'Exported']];
+  S.IDENTIFICATION_STATUS = [['draft', 'Photographed'], ['analyzing', 'Being identified'], ['ready', 'AI identified — awaiting review'], ['failed', 'Identification failed'],
+    ['confirmed', 'Confirmed'], ['discarded', 'Discarded']];
+  S.ROOM_INVENTORY = [['', 'Not started'], ['in_progress', 'In progress'], ['complete', 'Complete']];
+  S.EXPORT_FORMATS = [['csv', 'CSV'], ['xlsx', 'Excel (XLSX)'], ['json', 'JSON']];
 
   S.FINDING_CATEGORIES = ['Audio', 'Video', 'Control & UX', 'Network & Security', 'Documentation', 'Training', 'Spare Parts', 'Infrastructure',
     'Preventive Maintenance', 'Other'];
@@ -168,7 +193,8 @@
     rooms: {
       label: 'Room', code: ['RM', 4],
       cols: 'building_id!>buildings floor_id!>floors area_id>areas code name number room_type capacity:int criticality conferencing_platform control_platform ' +
-        'dsp_platform display_config camera_config microphone_config scheduling_platform operational_status notes archived:bool'
+        'dsp_platform display_config camera_config microphone_config scheduling_platform operational_status notes archived:bool ' +
+        'department inventory_status inventory_completed_at:ts inventory_completed_by'
     },
     room_configurations: { label: 'Room configuration', code: ['RC', 3], cols: 'building_id!>buildings floor_id!>floors code name description capacity:int notes archived:bool' },
     room_configuration_members: { label: 'Configuration member', cols: 'configuration_id!>room_configurations room_id!>rooms' },
@@ -190,12 +216,21 @@
       cols: 'code asset_type name identifier description building_id>buildings floor_id>floors room_id>rooms device_id~devices model hostname management_ip ' +
         'ip_address mac_address vlan subnet gateway assignment_type poe_budget_w:num poe_used_w:num validation_status source notes archived:bool'
     },
+    /* One identification attempt: the photographs taken of a device and, when AI identification ran, its original answer
+       (kept unchanged). It becomes an asset only when a person confirms it (device_id is then set). */
+    asset_identifications: {
+      label: 'Device identification',
+      cols: 'building_id>buildings floor_id>floors room_id>rooms device_id~devices status provider model requested_at:ts completed_at:ts result:json error ' +
+        'selected_index:int draft:json notes'
+    },
     devices: {
       label: 'Device', code: ['DV', 4],
       cols: 'code building_id!>buildings floor_id!>floors room_id>rooms rack_id>racks audit_id~audits category custom_category role manufacturer model hostname ' +
         'ip_address ip_status mac_address mac_status serial_number serial_status subnet vlan ip_assignment dns_name firmware_version app_version ' +
         'switch_asset_id~infra_assets connected_switch switch_port connection_type poe_required poe_class power_source rack_location monitoring_portal ' +
-        'management_url warranty_info support_expiration:date notes archived:bool'
+        'management_url warranty_info support_expiration:date notes archived:bool ' +
+        'make product_family asset_tag identity_confirmed_at:ts identity_confirmed_by field_sources:json manual_review:bool last_verified_at:ts ' +
+        'ai_identification_id~asset_identifications merged_into~devices distinct_from:json exported_at:ts export_code export_sig'
     },
     switch_ports: {
       label: 'Switch port',
@@ -229,7 +264,7 @@
       label: 'Photograph', code: ['PH', 5],
       cols: 'code building_id>buildings floor_id>floors room_id>rooms audit_id~audits device_id~devices finding_id~findings test_id~functional_tests ' +
         'backlog_item_id~backlog_items it_request_id~it_requests spare_item_id~spare_items category description taken_at:ts original_filename mime size_bytes:int ' +
-        'width:int height:int has_edit:bool thumb remote_ref remote_edit_ref'
+        'width:int height:int has_edit:bool thumb remote_ref remote_edit_ref identification_id~asset_identifications phash crop_of~photos'
     },
     followups: { label: 'Follow-up task', cols: 'kind device_id~devices room_id~rooms title detail suggested_party status resolved_at:ts it_request_id~it_requests dedupe_key' },
     insight_states: { label: 'Insight state', cols: 'insight_key state note' },
@@ -237,6 +272,14 @@
     activity_log: { label: 'Activity', cols: 'at:ts actor action entity_type entity_id entity_code summary building_id floor_id room_id changes:json detail:bool' },
     exports: {
       label: 'Export', cols: 'code mode window_start:ts window_end:ts baseline_export_id baseline_at:ts filters:json counts:json validation:json summary:json filename photo_mode status'
+    },
+    /* Categories and manufacturers added by an administrator, and built-in categories they have hidden (archived). */
+    asset_taxonomy: { label: 'Category or manufacturer', cols: 'kind name group_name archived:bool sort_order:num notes' },
+    /* How asset records are written for a receiving system: the target columns, in order, and where each value comes from. */
+    export_profiles: { label: 'Export mapping', cols: 'name target_system format mapping:json options:json notes archived:bool' },
+    asset_exports: {
+      label: 'Asset export', code: ['AX', 4],
+      cols: 'profile_id~export_profiles profile_name format scope:json record_count:int counts:json validation:json filename exported_by status'
     }
   });
   S.COMMON_COLS = ['id', 'org_id', 'created_at', 'updated_at', 'created_by', 'updated_by', 'deleted_at', 'is_demo'];
@@ -270,7 +313,12 @@
       audit_notes: [['note_type', opt(S.NOTE_TYPES)]],
       network_links: [['kind', opt(['uplink', 'dependency'])]],
       followups: [['status', opt(['open', 'resolved', 'dismissed'])]],
-      spare_items: [['lifecycle', opt(S.SPARE_LIFECYCLE)]]
+      spare_items: [['lifecycle', opt(S.SPARE_LIFECYCLE)]],
+      rooms: [['inventory_status', opt(S.ROOM_INVENTORY)]],
+      asset_identifications: [['status', opt(S.IDENTIFICATION_STATUS)]],
+      asset_taxonomy: [['kind', opt(['category', 'manufacturer'])]],
+      export_profiles: [['format', opt(S.EXPORT_FORMATS)]],
+      asset_exports: [['format', opt(S.EXPORT_FORMATS)], ['status', opt(['success', 'failed'])]]
     };
   })();
 
@@ -300,6 +348,10 @@
       case 'network_links': return r.kind === 'uplink' ? 'switch uplink' : ('dependency' + (r.dep_type ? ' on ' + r.dep_type : ''));
       case 'backlog_it_links': return 'backlog item ↔ coordination request';
       case 'room_configuration_members': return 'member space of a combined configuration';
+      case 'asset_identifications': return 'device identification' + (r.status ? ' (' + S.label(S.IDENTIFICATION_STATUS, r.status) + ')' : '');
+      case 'asset_taxonomy': return (r.kind === 'manufacturer' ? 'manufacturer ' : 'category ') + (r.name || '');
+      case 'export_profiles': return r.name || 'Export mapping';
+      case 'asset_exports': return 'asset export ' + (r.code || '');
       default: return r.name || r.title || r.code || table;
     }
   };
@@ -341,7 +393,15 @@
     { k: 'camera_config', label: 'Camera configuration', group: 'Systems', ph: 'e.g. Single PTZ, front of room' },
     { k: 'microphone_config', label: 'Microphone configuration', group: 'Systems', ph: 'e.g. Ceiling array ×2' },
     { k: 'operational_status', label: 'Current operational status', type: 'select', opts: S.OP_STATUS, group: 'Status' },
+    { k: 'department', label: 'Department / business unit', group: 'Status' },
     { k: 'notes', label: 'Room notes', type: 'textarea', group: 'Status' }
+  ];
+  /* The room as the inventory screens edit it: identification only, nothing about how well the room works. */
+  F.inventoryRoom = [
+    { k: 'number', label: 'Room number', half: true, mono: true, ph: 'e.g. 22B' },
+    { k: 'name', label: 'Room name', half: true },
+    { k: 'department', label: 'Department / business unit', ph: 'e.g. Investment Banking' },
+    { k: 'notes', label: 'Room notes', type: 'textarea', rows: 2 }
   ];
   F.configuration = [
     { k: 'name', label: 'Configuration name', req: true, ph: 'e.g. 23A Combined (North + South)' },

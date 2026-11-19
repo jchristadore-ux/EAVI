@@ -28,6 +28,15 @@ What was tested, how, with what result — and what was not. Date of this run: *
 >
 > **Later run, 13 November 2026 (room list import update mode; Presentation room type):** 61 tests; **60 pass**,
 > including the new update-mode test. *Offline shell* fails for the same browser-pane reason as above.
+>
+> **Later run, 19 November 2026 (asset inventory; Legacy Command Center):** 73 tests; **73 pass**, including
+> *offline shell* this time and the eleven new inventory tests in §4.6. An independent review of the new code raised 24
+> findings (§6); all were fixed, and tests 70–73 cover the serious ones. The phone-layout test (46) now also covers the
+> nine inventory screens and four inventory sheets: no sideways overflow at 390 px, every tapped control at least
+> 44 px (it caught 13 px checkboxes in the mapping editor; now switches). `tools\validate-outputs.ps1`: all checks pass,
+> including the new asset export workbook opened in Microsoft Excel (it found that `EV.xlsx.simple` named its tables
+> `tbl1`, which Excel refuses; fixed). The validator now opens each workbook in its own Excel instance. AI
+> identification was exercised only against a stand-in service: **no real AI provider was called** (§7).
 
 ## 1. Summary
 
@@ -161,6 +170,21 @@ text. They do not show that the SQL runs, or that Supabase behaves as the mocks 
 | 54 | the production site carries no demo data | The application page, its offline file list and the built site have no demo seed; no production source file holds demo record text; without the seed, Settings offers no demo environment |
 | 52 | hosted demonstration copy | Under a stand-in for the claude.ai page host (`tests/hosted-preload.js`): the copy opens in the synthetic demo environment with its **DEMONSTRATION COPY** notice on every screen, keeps routes in memory and offers no workspace connection; a file leaves only through the host's save function; a declined, refused or unavailable save is never recorded as delivered and no download is attempted; and the built single-file page itself, in a frame with no storage at all, still opens in memory and says that nothing will be kept |
 
+### 4.6 Asset inventory (19 November 2026)
+
+| # | Test | What it establishes |
+|---|---|---|
+| 63 | asset inventory: identifier states and asset status | Verified / captured / not accessible / not applicable / not captured per identifier; only "not captured" counts as missing; status follows from them and a confirmed identity; a changed model clears the confirmation and is in the history with its source; a value typed into a "not accessible" identifier becomes a captured value; a room is complete only when marked |
+| 64 | AI answers are checked before use | A serial not read from text, an incomplete MAC and an invalid IP are not used; "confirmed" needs a label or logo; look-alike models drop to low and are offered, never filled in; categories only from the list; a typed value is never replaced by a later AI answer |
+| 65 | capture and confirm | Photographs are stored with the capture and fingerprinted; only the photographs, the category list and a device limit are sent (no room or building text); nothing is an asset before confirmation; each value keeps its source; the original answer is kept; discarding deletes the photographs; saving without a model flags manual review; a refusal from the service marks the capture failed with a plain message |
+| 66 | duplicates and merge | A shared serial (case and spaces ignored) is one group; a capture with that serial is shown both records; a verified serial cannot be replaced by an unverified one; photographs and findings move to the kept record; the merged record is deleted and points at it; same model in the same room is only a question until answered; nearly identical photographs are a hint |
+| 67 | export engine | Scope and verification rules; a pasted portal header becomes a mapping with suggested sources; the validation report counts required gaps, invalid values, repeated identifiers and unverified rows; CSV with the formula guard, JSON and Excel files; the export is recorded and assets marked only by the record step; a later change is "changed since export" |
+| 68 | navigation | The dashboard is the start page; legacy sections sit behind one link (or all, by the setting); every legacy route still renders; every new screen and sheet renders; in a room the capture button is a camera file input |
+| 70 | inventory safeguards | An AI answer that arrives after a capture was discarded changes nothing; a capture becomes one asset once; a re-run keeps "not accessible" and values the person chose; editing a verified identifier (asset or capture) resets it to unverified; the legacy device editor records manual sources and clears a confirmed identity it changes |
+| 71 | merge keeps verification | The same serial on both records keeps the stronger (verified) status; the confirmed identity that results is kept; firmware, switch port and warranty fill the kept record's gaps and are listed in the merge sheet |
+| 72 | export state | A change to the room, a technical field or a photograph marks an exported asset as changed at once; a change made while the file is being saved is not marked as exported |
+| 73 | registry links, room page, older database | A link into the registry shows exactly what it names; the room page writes nothing while shown; a sync against a database without the new columns says to run `supabase/schema.sql` and keeps the changes queued |
+| 69 | upgrade in place | The new object stores exist; `supabase/schema.sql` adds every new column with `if not exists` and re-applies the identifier status list with `unavailable`; no value list exists only inside a `create table`; the daily export's device columns are unchanged |
 ## 5. Manual checks (11–12 November 2026)
 
 | Check | Method | Result |
@@ -200,6 +224,19 @@ Confirmed findings that were **not** changed in code, and why:
 | Daily-export CSV files are not formula-escaped | Deliberate: they are interchange data. Stated in the manifest, the analysis instructions and [SECURITY.md](SECURITY.md) §3.7 |
 | Annotation redraw performance on a real phone | Cannot be judged without the device; the drawing surface is prepared once per stroke session |
 
+### 6.1 Review of the asset inventory (19 November 2026)
+
+One reviewer read the new inventory code against the owner's rules. 24 findings, all fixed. The serious ones: a late
+AI answer could reopen a confirmed or discarded capture and allow a second asset; the room page wrote a setting on
+every redraw (a write-and-redraw loop); synchronisation stopped without explanation on a workspace database that
+lacks the new tables; a merge could lose a verified status or the confirmed identity when both records held the same
+value, and dropped technical values held only by the merged record. Others: export state cached past room changes, an
+incomplete export signature, the signature taken after the save instead of what was written, a capture split in two
+while the first photograph was being stored, a manual-review flag that stuck, captures of a deleted room that could not
+be discarded, a verified status kept after the value changed, the legacy device editor bypassing the inventory rules,
+re-runs undoing the person's choices, stale registry filters and selections, crops not sent, an unguarded export
+button, and four wording or touch-target issues.
+
 ## 7. Not tested — and what to do about it
 
 | Gap | Why | Required before relying on it |
@@ -212,5 +249,8 @@ Confirmed findings that were **not** changed in code, and why:
 | Two real people editing at once | Simulated with mock workspaces | §3.6 lines 11–12 |
 | Screen readers and other assistive technology | Not exercised | Accessibility review if required |
 | Browsers other than a Chromium engine | Not exercised | Safari on iOS is the target: covered by the device acceptance test |
+| AI identification with a real provider | No AI key; the server function has never been deployed or run | `docs/AI_IDENTIFICATION.md`: deploy, set the secrets, and try it with photographs that are not client equipment before authorizing it |
+| The upgrade SQL on the live workspace | Run only as text comparison here | Run `supabase/schema.sql` in the SQL editor before deploying this version; then repeat DEPLOYMENT.md §3.6 checks 1–3 |
+| Barcode reading, crop and camera capture on a phone | Barcode Detection API absent on this desktop; no device | Android Chrome for barcodes; iPhone for the camera flow |
 
 Requirement-by-requirement status is in [REQUIREMENTS.md](REQUIREMENTS.md).

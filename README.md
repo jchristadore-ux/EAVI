@@ -2,9 +2,10 @@
 
 *See the environment. Understand the infrastructure. Improve the experience.*
 
-A mobile-first, offline-first application for auditing conference-room AV environments: walk a floor with an iPhone,
-audit each room, photograph the equipment, inventory every device with its network identity, run the functional
-tests, record findings, and leave with a prioritised improvement backlog, reports and a structured daily export.
+A mobile-first, offline-first **AV asset inventory**: walk a floor with a phone, photograph each device, identify it
+(with AI when the workspace has authorized it), capture its serial number, MAC and IP address, and export clean,
+mapped asset records for the monitoring portal. The earlier audit workspace (room audits, findings, backlog,
+reports, daily export) is kept whole as the Legacy Command Center. See [docs/INVENTORY.md](docs/INVENTORY.md).
 
 > **Approval.** The application, its hosting and any cloud database must pass the client's security review before real
 > client infrastructure information is entered. See [docs/SECURITY.md](docs/SECURITY.md).
@@ -19,7 +20,12 @@ Version 1.0.0 · 12 November 2026
 
 | Area | Summary |
 |---|---|
-| Command Center | Figures computed from the records: audit progress, incomplete device identification, open backlog by priority, outstanding requests, alerts and suggestions |
+| Inventory Dashboard | Rooms inventoried, unique and captured devices, devices awaiting identification or incomplete, ready for export, exported; progress by building, floor, department and category; identifier quality that separates *not captured* from *not accessible* and *not applicable* |
+| Room Inventory | Building → floor → room; one tap opens the camera to add a device; mark the room complete, go to the next room |
+| Identify Devices | Photographs (front, rear, label, ports), optional AI identification through the workspace (no key in the browser; off until authorized), review and confirm; crop; barcode reading where the browser supports it |
+| Asset Registry | Every confirmed device with the source of each value, verification status, search and filters, bulk actions, duplicate detection and field-by-field merge |
+| Export & Integration | CSV, Excel and JSON by any scope, field mapping to the portal's columns, preview, validation report, export history; exported assets know when they have changed since |
+| *Legacy:* Command Center | Figures computed from the records: audit progress, incomplete device identification, open backlog by priority, outstanding requests, alerts and suggestions |
 | Buildings & Floors | Organization → Building → Floor → Area → Room → Rack → Device, including divisible rooms audited as a combined configuration |
 | Room Audits | Space summary, 13 photograph categories with direct camera capture, device inventory, 52 functional tests in 5 groups, findings, an 11-point network validation checklist, notes. Autosaved; resumable; a failed test only *suggests* a finding — the auditor confirms it |
 | Device Inventory | IP address, MAC address and serial number each have their own value and verification status. Missing values stay missing and are flagged; nothing is guessed |
@@ -37,6 +43,8 @@ browser's database on the device. The default build cannot make a connection to 
 
 | Document | For |
 |---|---|
+| [docs/INVENTORY.md](docs/INVENTORY.md) | The asset inventory: field workflow, asset record, AI identification, duplicates, export mapping, upgrading |
+| [docs/AI_IDENTIFICATION.md](docs/AI_IDENTIFICATION.md) | Operating the server-side AI identification: authorization, deployment, secrets (not yet run) |
 | [docs/MOBILE_GUIDE.md](docs/MOBILE_GUIDE.md) | The auditor: installing on an iPhone, auditing a room, exporting at the end of the day |
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Building, hosting, the optional cloud workspace, and what is needed to go live |
 | [docs/SECURITY.md](docs/SECURITY.md) | Controls, data flows, residual risks and the approvals required |
@@ -60,7 +68,7 @@ powershell -ExecutionPolicy Bypass -File tools\serve.ps1
 | Address | What |
 |---|---|
 | `http://localhost:5173/app/` | The application (development copy) |
-| `http://localhost:5173/tests/tests.html` | The automated test suite (54 tests) |
+| `http://localhost:5173/tests/tests.html` | The automated test suite (73 tests) |
 | `http://localhost:5173/tests/embed.html` | The single-file build inside a frame |
 
 Build the deployable site, the single-file page and the source package:
@@ -74,10 +82,11 @@ Then upload `dist\site\` to an approved HTTPS static host — see [docs/DEPLOYME
 ## Layout
 
 ```
-app/          the application: index.html, css/, js/ (29 files), icons/, manifest, service worker
+app/          the application: index.html, css/, js/ (35 files), icons/, manifest, service worker
 tests/        in-browser test suite and the pages that host it
 tools/        build, development server, output validation, PDF rendering (PowerShell scripts) and the SQL generator
-supabase/     schema.sql - PostgreSQL schema, row-level security and storage policies (generated; optional; never executed)
+supabase/     schema.sql - PostgreSQL schema, row-level security and storage policies (generated; safe to re-run as an upgrade);
+              functions/identify-device - server-side AI identification (written, never run)
 deploy/       response-header and access templates for static hosts (untested templates)
 docs/         the documents listed above
 dist/         build output (not in version control)
@@ -87,7 +96,8 @@ dist/         build output (not in version control)
 
 | | |
 |---|---|
-| Automated tests | 54 of 54 pass, in a real browser on a real IndexedDB database |
+| Automated tests | 73 of 73 pass, in a real browser on a real IndexedDB database (19 November 2026) |
+| AI identification | **Never run against a real provider** (no key available); tested with a stand-in service only |
 | Generated files | Export ZIP, CSVs, PDFs and workbooks validated by independent readers (.NET, Microsoft Excel, Windows PDF engine) |
 | Offline | Verified: the built site starts and works with the server stopped |
 | Hosting | **Not deployed.** No hosting account was available; the built site is ready to upload |

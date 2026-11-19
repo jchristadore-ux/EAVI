@@ -227,7 +227,8 @@
     /* Quick workbook from simple tables: [{ name, columns: ['A','B'], rows: [[..]] }] */
     simple: function (title, tables) {
       return build({ title: title, sheets: tables.map(function (t, i) {
-        return { name: t.name || 'Sheet ' + (i + 1), table: 'tbl' + (i + 1), columns: t.columns.map(function (c, ci) {
+        /* not 'tbl1': Excel refuses a table name that reads as a cell reference (column TBL, row 1) */
+        return { name: t.name || 'Sheet ' + (i + 1), table: 'tbl_' + (i + 1), columns: t.columns.map(function (c, ci) {
           const longest = Math.max(String(c).length, Math.max.apply(null, [0].concat(t.rows.slice(0, 200).map(function (r) { return String(r[ci] == null ? '' : r[ci]).length; }))));
           return { header: c, width: Math.min(60, Math.max(10, longest + 2)), wrap: longest > 50 };
         }), rows: t.rows };

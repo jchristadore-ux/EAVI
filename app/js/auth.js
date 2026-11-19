@@ -124,7 +124,7 @@
     }
     return shellCard([
       h('h1.gate-title', null, 'Set up this device'),
-      h('p.gate-text', null, 'Audit records are stored on this device and saved automatically. Nothing is sent anywhere unless you export it or connect an approved sync service.'),
+      h('p.gate-text', null, 'Inventory records and photographs are stored on this device and saved automatically. Nothing is sent anywhere unless you export it or connect an approved sync service.'),
       h('div.form-grid', null,
         ui.field('Auditor name', ui.input(f.name, { id: 'ob-name', ph: 'Name shown on audits and reports', caps: 'words', oninput: function (v) { f.name = v; } }), { req: true }),
         ui.field('Email (optional)', ui.input(f.email, { id: 'ob-email', type: 'email', ph: 'For report attribution', mono: true, oninput: function (v) { f.email = v; } })),

@@ -110,6 +110,11 @@
       onSet: function (d, k, v, patch) {
         if (/_status$/.test(k) && v === 'not_applicable') { const f = R.ID_FIELDS.find(function (x) { return x.s === k; }); if (f) patch[f.k] = ''; }
         if (k === 'switch_asset_id') { const a = store.get('infra_assets', v); patch.connected_switch = a ? (a.name || a.hostname || '') : ''; }
+        /* the asset inventory's rules hold here too: a value typed here is entered manually, and a changed identity is
+           no longer the one a person confirmed */
+        const I = EV.inv;
+        if (I && I.SOURCED.indexOf(k) >= 0) { const fs = Object.assign({}, I.sources(d), d.field_sources || {}); if (U.blank(v)) delete fs[k]; else fs[k] = 'manual'; patch.field_sources = fs; }
+        if (I && ['manufacturer', 'model', 'category', 'custom_category'].indexOf(k) >= 0 && d.identity_confirmed_at && String(v || '') !== String(d[k] || '')) { patch.identity_confirmed_at = null; patch.identity_confirmed_by = ''; }
       },
       onDone: function (d) {
         A.syncDevicePort(d);

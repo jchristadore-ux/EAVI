@@ -62,7 +62,7 @@
     let n = 0; S.TEST_CATEGORIES.forEach(function (c) { n += S.TESTS[c].length; });
     eq(n, 52, 'functional test catalogue size');
     eq(S.NETWORK_CHECKS.length, 11, 'network validation checklist size');
-    eq(S.DEVICE_CATEGORIES.length, 24); eq(S.PHOTO_CATEGORIES.length, 13); eq(S.BACKLOG_STATUSES.length, 12); eq(S.FINDING_CATEGORIES.length, 10); eq(S.ROOM_TYPES.length, 15);
+    eq(S.DEVICE_CATEGORIES.length, 37); eq(S.PHOTO_CATEGORIES.length, 15); eq(S.BACKLOG_STATUSES.length, 12); eq(S.FINDING_CATEGORIES.length, 10); eq(S.ROOM_TYPES.length, 15);
   });
   test('validation helpers: IP and MAC formats', function () {
     assert(R.ipValid('192.0.2.21')); assert(!R.ipValid('192.0.2.256')); assert(!R.ipValid('192.0.2')); assert(R.ipValid('2001:db8::1'));
@@ -1284,7 +1284,8 @@
       const dev = store.all('devices').find(function (x) { return x.hostname === 'DEMO-22B-CAM01'; });
       const routes = ['/', '/environment', '/floor/' + f22.id, '/room/' + a22B.room_id, '/audits', '/audit/' + a22B.id, '/devices', '/devices?filter=incomplete', '/infrastructure', '/infrastructure?tab=switches',
         '/infrastructure?tab=addressing', '/infrastructure?tab=dependencies', '/infrastructure?tab=validation', '/backlog', '/backlog?tab=triage', '/backlog/' + ctx.bl1.id, '/coordination', '/spares', '/reports',
-        '/reports/executive', '/reports/room?audit=' + a22B.id, '/reports/devices', '/reports/network', '/export', '/settings'];
+        '/reports/executive', '/reports/room?audit=' + a22B.id, '/reports/devices', '/reports/network', '/export', '/settings',
+        '/legacy', '/rooms', '/rooms/floor/' + f22.id, '/rooms/room/' + a22B.room_id, '/identify', '/assets', '/assets?tab=review', '/assets?tab=duplicates', '/integration'];
       /* one-handed use: every control that is tapped is at least 44 px in both directions. A switch, a text link and a
          tappable chip keep their look and carry a 44 px touch area around them instead. */
       let controls = 0;
@@ -1330,7 +1331,10 @@
       Array.prototype.forEach.call(targets, function (b) { const r = b.getBoundingClientRect(); assert(r.width >= 44 && r.height >= 44, 'bottom navigation target is ' + Math.round(r.width) + '×' + Math.round(r.height) + ' px'); });
       /* editors are sheets that fit the screen */
       const sheets = [['device editor', function () { return w.EV.editors.device(dev.id); }], ['finding editor', function () { return w.EV.editors.finding(ctx.f1.id); }], ['room editor', function () { return w.EV.editors.room(a22B.room_id); }],
-        ['quick actions', function () { return w.EV.openNew(); }], ['photograph viewer', function () { return w.EV.photos.openViewer(store.all('photos').find(function (p) { return p.is_demo; }).id); }]];
+        ['quick actions', function () { return w.EV.openNew(); }], ['photograph viewer', function () { return w.EV.photos.openViewer(store.all('photos').find(function (p) { return p.is_demo; }).id); }],
+        ['asset record', function () { return w.EV.assets.open(dev.id); }], ['capture screen', function () { return w.EV.identify.open({ room: w.EV.store.get('rooms', a22B.room_id) }); }],
+        ['compare and merge', function () { const o = store.all('devices').find(function (x) { return x.is_demo && x.id !== dev.id && !x.archived; }); return w.EV.assets.mergeSheet(dev.id, o.id); }],
+        ['export mapping editor', function () { return w.EV.assetExport.editMapping(null); }]];
       for (const s of sheets) {
         s[1](); await wait(160);
         const el = d.querySelector('.sheet');
@@ -1890,6 +1894,43 @@
     await dropDb(newDb);
   });
 
+  test('a field keeps its cursor when a browser extension has put elements of its own beside it (as Grammarly does), also when its Required flag clears', async function () {
+    const ui = EV.ui;
+    ui.sheets.slice().forEach(function (s) { ui.closeSheet(s); });
+    await wait(80);
+    let rebuilt = 0;
+    const realError = console.error;
+    console.error = function () { if (/\[patch\]/.test(String(arguments[0]))) rebuilt++; return realError.apply(console, arguments); };
+    try {
+      EV.editors.newFinding({ room: store.get('rooms', ctx.r1.id) });
+      await wait(150);
+      const done = Array.prototype.find.call(document.querySelectorAll('button'), function (b) { return b.textContent.trim() === 'Done'; });
+      done.click();
+      await wait(150);
+      const t = document.querySelector('textarea[id$="-observation"]');
+      assert(t && t.closest('.field').classList.contains('is-missing'), 'the empty required field is flagged');
+      /* what the extension does: nodes of its own around the field, inside the same label */
+      const g1 = document.createElement('grammarly-extension'), g2 = document.createElement('grammarly-extension');
+      t.parentNode.insertBefore(g1, t); t.parentNode.insertBefore(g2, t.nextSibling);
+      t.focus();
+      t.value = 'P'; t.dispatchEvent(new Event('input', { bubbles: true }));
+      await wait(150);
+      eq([document.querySelector('textarea[id$="-observation"]') === t, document.activeElement === t, t.value, g1.isConnected && g2.isConnected, rebuilt],
+        [true, true, 'P', true, 0], 'same field, still focused, the extension\'s nodes left alone, no rebuild');
+      assert(!t.closest('.field').classList.contains('is-missing') && !t.closest('.field').querySelector('.field-error'), 'the Required flag cleared around the foreign nodes');
+      t.value = 'Pa'; t.dispatchEvent(new Event('input', { bubbles: true }));
+      await wait(150);
+      eq([document.activeElement === t, t.value, rebuilt], [true, 'Pa', 0], 'typing continues');
+      eq(store.all('findings').slice().sort(function (a, b) { return a.created_at < b.created_at ? 1 : -1; })[0].observation, 'Pa', 'and is saved');
+      const discard = Array.prototype.find.call(document.querySelectorAll('button'), function (b) { return b.textContent.trim() === 'Discard'; });
+      if (discard) discard.click();
+      await wait(100);
+    } finally {
+      console.error = realError;
+      ui.sheets.slice().forEach(function (s) { ui.closeSheet(s); });
+    }
+  });
+
   test('application updates: a new version loads by itself only when no editor or dialog is open, nothing is typed in and every change is saved; Load now works at once', async function () {
     const upd = EV.update, realReload = upd.reload, ui = EV.ui;
     let reloaded = 0;
@@ -1951,6 +1992,338 @@
     eq(n, 1, 'the earlier format is accepted');
     eq(store.get('it_requests', r.id).requested_from, 'Client IT', 'and the value is renamed on the way in');
     store.purge('it_requests', r.id);
+  });
+
+  /* ------------------------------------------------------------------ asset inventory */
+  const I = EV.inv, ID = EV.identify, XA = EV.assetExport;
+  function invRoom(number) {
+    if (!ctx.invFloor) {
+      const b = store.create('buildings', { name: 'Inventory Test Tower', address: '', identifier: 'ITT', floors_count: null, site_contact: '', notes: '', archived: false });
+      ctx.invFloor = store.create('floors', { building_id: b.id, number: '7', designation: '', infrastructure_notes: '', audit_status_override: '', sort_order: 7, archived: false });
+    }
+    return A.addRoom(ctx.invFloor, { number: number, name: 'Inventory room ' + number, department: 'Operations' });
+  }
+  async function imageFile(text, color) {
+    const c = document.createElement('canvas'); c.width = 320; c.height = 240;
+    const x = c.getContext('2d'); x.fillStyle = color || '#223'; x.fillRect(0, 0, 320, 240); x.fillStyle = '#fff'; x.font = '24px sans-serif'; x.fillText(text, 20, 120);
+    const blob = await new Promise(function (r) { c.toBlob(r, 'image/jpeg', 0.9); });
+    return new File([blob], 'photo.jpg', { type: 'image/jpeg' });
+  }
+  test('asset inventory: each identifier is verified, captured, not accessible, not applicable or not captured; the asset status follows from them and from a confirmed identity', function () {
+    const room = invRoom('I-1');
+    const before = I.metrics();
+    const a = I.create(room, { category: 'DSP', manufacturer: 'Biamp', model: 'Tesira FORTE', serial_number: 'SN-A1', serial_status: 'verified_onsite', mac_status: 'unavailable', ip_status: 'not_applicable' },
+      { manufacturer: 'manual', model: 'manual', serial_number: 'label', category: 'manual' }, { confirm: true });
+    const ra = I.asset(a);
+    eq([ra.states.serial_number, ra.states.mac_address, ra.states.ip_address, ra.status, ra.incomplete], ['verified', 'unavailable', 'na', 'verified', false], 'not accessible and not applicable are answers, not gaps');
+    eq([a.field_sources.serial_number, a.field_sources.model, !!a.identity_confirmed_at, !!a.last_verified_at, /-DV-\d{4}$/.test(a.code)], ['label', 'manual', true, true, true]);
+    const b = I.create(room, { category: 'Camera' }, {}, { manualReview: true });
+    const rb = I.asset(b);
+    eq([rb.status, rb.incomplete, rb.states.mac_address, rb.missingIdentity], ['needs_identification', true, 'not_captured', ['Manufacturer', 'Model']]);
+    const after = I.metrics();
+    eq([after.assets - before.assets, after.needsId - before.needsId, after.verified - before.verified, after.missing.mac_address - before.missing.mac_address],
+      [2, 1, 1, 1], 'a MAC marked not accessible is not counted as missing; one never captured is');
+    /* a changed identity is no longer the confirmed one; the change is in the asset's history with its source */
+    const a2 = I.update(a, { model: 'Tesira SERVER-IO' });
+    eq([a2.identity_confirmed_at, a2.field_sources.model, I.asset(a2).status], [null, 'manual', 'partial']);
+    assert(I.history(a2).some(function (e) { return (e.changes || []).some(function (c) { return c.f === 'model' && c.to === 'Tesira SERVER-IO'; }); }), 'the change is in the history');
+    eq(I.asset(I.confirmIdentity(a2)).status, 'verified');
+    /* typing a value into an identifier marked not accessible makes it a captured value */
+    const a3 = I.update(store.get('devices', a.id), { mac_address: '00:00:5E:00:53:A1' });
+    eq([a3.mac_status, I.asset(a3).states.mac_address, I.asset(a3).status], ['unknown', 'captured', 'partial']);
+    const a4 = I.setIdStatus(a3, I.ID_FIELDS.find(function (f) { return f.k === 'mac_address'; }), 'verified_onsite');
+    eq([I.asset(a4).status, !!a4.last_verified_at], ['verified', true]);
+    /* the room: in progress once something is recorded, complete only when a person says so */
+    eq(I.roomStatus(store.get('rooms', room.id)), 'in_progress');
+    store.update('rooms', room.id, { inventory_status: 'complete', inventory_completed_at: U.now(), inventory_completed_by: store.actor() });
+    eq(I.roomStatus(store.get('rooms', room.id)), 'complete');
+    ctx.invA = a.id; ctx.invB = b.id;
+  });
+  test('AI answers are checked before use: identifiers only from visible text and in a valid form, look-alike models only as suggestions, categories only from the list', function () {
+    const n = EV.ai.normalize({ provider: 'p', model: 'm', devices: [{
+      manufacturer: { value: 'Shure', confidence: 'confirmed', evidence: 'appearance' }, model: { value: 'MXA920', confidence: 'probable', evidence: 'appearance', alternatives: ['MXA910', 'MXA920'] },
+      category: { value: 'ceiling microphone ARRAY', confidence: 'probable', evidence: 'appearance' }, 'function': { value: 'Ceiling microphone', confidence: 'probable', evidence: 'appearance' },
+      serial_number: { value: 'ABC123', evidence: 'appearance' }, mac_address: { value: '00:0e:dd:12:34', evidence: 'visible_text' }, ip_address: { value: '192.0.2.10', evidence: 'visible_text', image_index: 1 },
+      other_identifiers: [{ label: 'Asset tag', value: 'AT-77' }, { label: 'x', value: '' }] }, { manufacturer: { value: 'Acme' }, category: { value: 'Teleporter', confidence: 'confirmed', evidence: 'label_text' } }] }, I.categories());
+    const d = n.devices[0];
+    eq([d.manufacturer.confidence, d.model.confidence, d.model.alternatives, d.category.value], ['probable', 'low', ['MXA910'], 'Ceiling microphone array'], 'confirmed needs a label or logo; look-alike models drop to low');
+    eq([d.serial_number.value, d.serial_number.raw_text, d.mac_address.value, d.mac_address.raw_text, d.ip_address.value, d.ip_address.image_index], ['', 'ABC123', '', '00:0e:dd:12:34', '192.0.2.10', 1],
+      'a serial not read from text and an incomplete MAC are never used');
+    eq([d.needs_manual_review, d.other_identifiers.length], [true, 1]);
+    eq([n.devices[1].category.value, n.devices[1].needs_manual_review, n.devices[1].review_reasons.some(function (r) { return /not in the category list/.test(r); })], ['', true, true]);
+    const fill = EV.ai.prefill(d);
+    eq([fill.values.manufacturer, fill.values.model, fill.suggest.model, fill.values.ip_address, fill.statuses.ip_status, fill.values.serial_number], ['Shure', undefined, ['MXA920', 'MXA910'], '192.0.2.10', 'unknown', undefined],
+      'a model that cannot be told apart is offered, never filled in');
+    const mac = EV.ai.normalize({ devices: [{ mac_address: { value: '000edd123456', evidence: 'visible_text' } }] }).devices[0].mac_address;
+    eq(mac.value, '00:0E:DD:12:34:56', 'a complete MAC read from a label is normalised');
+    /* what a person typed is never replaced by an AI answer; an earlier AI value is */
+    const merged = ID.mergeDraft({ values: { manufacturer: 'Biamp', model: 'Old AI' }, sources: { manufacturer: 'manual', model: 'ai' }, statuses: {} }, { values: { manufacturer: 'Shure', model: 'MXA920' }, sources: {}, statuses: {}, suggest: {} });
+    eq([merged.values.manufacturer, merged.sources.manufacturer, merged.values.model, merged.sources.model], ['Biamp', 'manual', 'MXA920', 'ai']);
+  });
+  test('capture and confirm: photographs are kept, only the photographs and the category list are sent, the person confirms, and each value keeps its source', async function () {
+    const room = invRoom('I-2');
+    let sent = null, calls = 0;
+    EV.ai.transport = async function (method, body) {
+      if (method === 'GET') return { enabled: true, configured: true, provider: 'stub', model: 'stub-1', max_images: 4 };
+      calls++; sent = body;
+      return { provider: 'stub', model: 'stub-1', devices: [{ manufacturer: { value: 'Crestron', confidence: 'confirmed', evidence: 'label_text', image_index: 0 },
+        model: { value: 'DM-NVX-363', confidence: 'confirmed', evidence: 'label_text', image_index: 0, alternatives: [] }, category: { value: 'AV-over-IP encoder/decoder', confidence: 'probable', evidence: 'appearance' },
+        serial_number: { value: 'NVX-SER-1', evidence: 'visible_text', image_index: 0 }, mac_address: { value: '00-00-5e-00-53-b1', evidence: 'visible_text' }, ip_address: { value: '', evidence: 'not_visible' } }] };
+    };
+    try {
+      eq(EV.ai.availability().ok, true);
+      const cap = ID.newCapture(room);
+      const recs = await ID.addPhotos(cap, [await imageFile('CRESTRON DM-NVX-363')], 'label');
+      eq([recs.length, recs[0].category, recs[0].identification_id, recs[0].room_id], [1, 'Equipment labels', cap.id, room.id]);
+      assert(/^[0-9a-f]{16}$/.test(store.get('photos', recs[0].id).phash), 'a fingerprint is kept for duplicate hints');
+      ID.setValue(cap.id, 'manufacturer', 'Crestron Electronics');
+      await ID.run(cap.id);
+      eq(Object.keys(sent).sort(), ['categories', 'images', 'max_devices'], 'nothing but the photographs, the category list and a device limit is sent');
+      eq(Object.keys(sent.images[0]).sort(), ['data', 'media_type', 'role']);
+      assert(JSON.stringify(sent).indexOf('I-2') < 0 && JSON.stringify(sent).indexOf('Inventory Test Tower') < 0, 'no room or building details');
+      let c = store.get('asset_identifications', cap.id);
+      eq([c.status, c.provider, c.result.devices.length, c.draft.values.manufacturer, c.draft.sources.manufacturer, c.draft.values.model, c.draft.values.mac_address],
+        ['ready', 'stub', 1, 'Crestron Electronics', 'manual', 'DM-NVX-363', '00:00:5E:00:53:B1'], 'the typed manufacturer stays; the answer fills the rest');
+      eq(store.all('devices').filter(function (x) { return x.ai_identification_id === cap.id; }).length, 0, 'nothing is an asset before a person confirms');
+      const dev = ID.confirm(cap.id);
+      c = store.get('asset_identifications', cap.id);
+      eq([c.status, c.device_id, dev.model, dev.field_sources.model, dev.field_sources.manufacturer, dev.serial_status, !!dev.identity_confirmed_at, I.asset(dev).status, store.get('photos', recs[0].id).device_id],
+        ['confirmed', dev.id, 'DM-NVX-363', 'ai', 'manual', 'unknown', true, 'partial', dev.id]);
+      eq(c.result.devices[0].serial_number.value, 'NVX-SER-1', 'the original answer is kept with the capture');
+      /* discarding a capture deletes its photographs and adds nothing */
+      const cap2 = ID.newCapture(room);
+      const p2 = await ID.addPhotos(cap2, [await imageFile('second')], 'front');
+      ID.discard(cap2.id);
+      eq([store.get('asset_identifications', cap2.id).status, store.get('photos', p2[0].id), store.all('devices').some(function (x) { return x.ai_identification_id === cap2.id; })], ['discarded', null, false]);
+      /* saved without a model: listed as needing identification */
+      const cap3 = ID.newCapture(room);
+      ID.setValue(cap3.id, 'category', 'Display'); ID.setValue(cap3.id, 'manufacturer', 'LG');
+      const d3 = ID.confirm(cap3.id);
+      eq([d3.manual_review, I.asset(d3).status, d3.identity_confirmed_at || null], [false, 'needs_identification', null], 'listed as needing identification because the model is missing, not because of a flag');
+      /* a refusal from the service is reported, and the capture says so */
+      EV.ai.transport = async function (method) { if (method === 'GET') return { enabled: false, configured: true }; throw Object.assign(new Error('x'), { code: 'disabled' }); };
+      const cap4 = ID.newCapture(room);
+      await ID.addPhotos(cap4, [await imageFile('third')], 'front');
+      let msg = ''; try { await ID.run(cap4.id); } catch (e) { msg = e.message; }
+      eq([/not been authorized/.test(msg), store.get('asset_identifications', cap4.id).status], [true, 'failed']);
+      ID.discard(cap4.id);
+      eq(calls, 1);
+    } finally { EV.ai.transport = null; }
+    /* without a workspace (or signed out) AI identification is not offered, and the screen says why */
+    const av = EV.ai.availability();
+    eq(av.ok, false); assert(av.message.length > 20, 'the reason is stated');
+  });
+  test('duplicates: a shared serial number, MAC address or asset tag is flagged; nothing merges by itself; a merge never replaces a verified value with an unverified one and moves everything to the kept record', async function () {
+    const room = invRoom('I-3');
+    const a = I.create(room, { category: 'Display', manufacturer: 'LG', model: '55UH5F', serial_number: 'DUP-SER-1', serial_status: 'verified_onsite' }, {}, { confirm: true });
+    const b = I.create(room, { category: 'Display', manufacturer: 'LG', model: '55UH5F', serial_number: 'dup-ser-1', mac_address: '00:00:5E:00:53:C1' }, { mac_address: 'ai' });
+    const g = I.duplicates().strong.find(function (x) { return x.devices.some(function (d) { return d.id === a.id; }); });
+    assert(g && g.field === 'serial_number' && g.devices.length === 2, 'the shared serial number is one group');
+    eq(I.candidatesFor({ serial_number: 'DUP-SER-1' }, room.id, null).filter(function (e) { return e.strong; }).length, 2, 'a capture with that serial is shown both records');
+    eq(Object.keys(I.mergeBlocks(a, b)), ['serial_number'], 'the verified serial cannot be replaced by the unverified one');
+    const photo = (await EV.photos.ingest([await imageFile('rear of b')], { room: room, device_id: b.id, category: 'Device rear panels' }))[0];
+    const finding = A.createFinding({ title: 'Linked to b', category: 'Video', observation: 'x', classification: 'observed_fact', building_id: room.building_id, floor_id: room.floor_id, room_id: room.id, device_id: b.id });
+    const res = I.merge(a.id, b.id, { serial_number: true });
+    const k = store.get('devices', a.id), gone = store.getAny('devices', b.id);
+    eq([k.serial_number, k.serial_status, k.mac_address, k.field_sources.mac_address, store.get('photos', photo.id).device_id, store.get('findings', finding.id).device_id, !!gone.deleted_at, gone.merged_into, res.blocked.serial_number ? 1 : 0],
+      ['DUP-SER-1', 'verified_onsite', '00:00:5E:00:53:C1', 'ai', a.id, a.id, true, a.id, 1]);
+    assert(!I.duplicates().strong.some(function (x) { return x.devices.some(function (d) { return d.id === a.id; }); }), 'the group is resolved');
+    /* identical models in one room: a question only, until answered */
+    const c1 = I.create(room, { category: 'Ceiling microphone array', manufacturer: 'Shure', model: 'MXA920' }, {}, { confirm: true });
+    const c2 = I.create(room, { category: 'Ceiling microphone array', manufacturer: 'Shure', model: 'mxa920' }, {}, { confirm: true });
+    const find = function () { return I.duplicates().possible.find(function (x) { return x.devices.some(function (d) { return d.id === c1.id; }); }); };
+    assert(find() && find().devices.length === 2, 'same manufacturer and model in the same room is asked about');
+    eq(I.metrics().unique, I.metrics().assets - I.duplicates().strong.reduce(function (n, x) { return n + x.devices.length - 1; }, 0), 'unique counts only shared identifiers');
+    I.markDistinct([c1, c2]);
+    assert(!find(), 'answered: different devices');
+    /* nearly identical photographs on two assets are a hint */
+    const p1 = (await EV.photos.ingest([await imageFile('same picture')], { room: room, device_id: c1.id, category: 'Device front' }))[0];
+    const p2 = (await EV.photos.ingest([await imageFile('same picture')], { room: room, device_id: k.id, category: 'Device front' }))[0];
+    store.update('photos', p1.id, { phash: 'ffff0000aaaa5555' }, { silent: true }); store.update('photos', p2.id, { phash: 'ffff0000aaaa5554' }, { silent: true });
+    assert(I.duplicates().photo.some(function (x) { return x.devices.some(function (d) { return d.id === c1.id; }) && x.devices.some(function (d) { return d.id === k.id; }); }), 'photo similarity is reported');
+    eq(I.hamming('ffff0000aaaa5555', 'ffff0000aaaa5554'), 1);
+  });
+  test('export engine: scope and verification rules, field mapping from the portal\'s header, a validation report, CSV / JSON / Excel files, and exported assets that know when they have changed since', async function () {
+    const room = invRoom('I-4');
+    const v1 = I.create(room, { category: 'Control processor', manufacturer: 'Crestron', model: 'CP4N', serial_number: 'CP4-1', serial_status: 'verified_onsite', mac_address: '00:00:5E:00:53:D1', mac_status: 'verified_onsite',
+      ip_address: '192.0.2.41', ip_status: 'verified_mgmt', notes: '=HYPERLINK("x")' }, {}, { confirm: true });
+    const p1 = I.create(room, { category: 'Touch panel', manufacturer: 'Crestron', model: 'TSW-1070', mac_address: '00:00:5E:00:53:D2' }, {}, { confirm: true });
+    const bad = I.create(room, { category: 'Touch panel', manufacturer: 'Crestron', model: 'TSW-770', mac_address: '00:00:5E:00:53', serial_number: 'CP4-1', serial_status: 'unknown' }, {}, { confirm: true });
+    const o = { scope: 'room', scopeId: room.id, which: 'all', include: 'verified', profile: 'standard', format: 'csv' };
+    eq(XA.collect(o).assets.map(function (d) { return d.id; }), [v1.id], 'verified only');
+    const all = XA.collect(Object.assign({}, o, { include: 'all' }));
+    eq([all.assets.length, all.excluded.length, XA.collect(Object.assign({}, o, { include: 'verified_partial' })).assets.length], [3, 0, 3]);
+    eq(XA.collect({ scope: 'room', scopeId: '', which: 'all', include: 'all' }).assets.length, 0, 'a scope without its choice exports nothing');
+    /* the portal's header line becomes the mapping, each column with a suggested source */
+    const cols = XA.fromHeader('﻿Device ID,Vendor,Product Model,Serial,MAC,Management IP,Site,Location,Device Type,Rack Unit\r\n1,2,3');
+    eq(cols.map(function (c) { return c.source; }), ['asset_id', 'manufacturer', 'model', 'serial_number', 'mac_address', 'ip_address', 'building', 'location', 'category', '']);
+    const prof = store.create('export_profiles', { name: 'Portal import', target_system: 'Monitoring portal', format: 'csv', archived: false, options: {}, notes: '',
+      mapping: [{ target: 'Device ID', source: 'asset_id', required: true }, { target: 'Vendor', source: 'manufacturer' }, { target: 'Management IP', source: 'ip_address', required: true },
+        { target: 'Site', source: '__const', value: 'HQ' }, { target: 'Notes', source: 'notes' }] });
+    const oa = Object.assign({}, o, { include: 'all', profile: prof.id });
+    const v = XA.validate(XA.profile(prof.id), XA.collect(oa));
+    eq([v.rows, v.required.length && v.required[0].target, v.required[0] && v.required[0].count, v.invalid.length, v.duplicates.length, v.unverified, v.ok], [3, 'Management IP', 2, 1, 1, 2, false]);
+    /* CSV: the mapped columns in order, a fixed value, the formula guard */
+    const csv = await XA.build(oa);
+    const rows = csvParse((await csv.blob.text()).replace(/^﻿/, ''));
+    eq(rows[0], ['Device ID', 'Vendor', 'Management IP', 'Site', 'Notes']);
+    const r1 = rows.find(function (r) { return r[0] === v1.code; });
+    eq([r1[1], r1[2], r1[3], r1[4]], ['Crestron', '192.0.2.41', 'HQ', '\'=HYPERLINK("x")'], 'a value that a spreadsheet would run as a formula is written as text');
+    assert(/^asset-export_.+_[A-Z0-9]+-AX-\d{4}\.csv$/.test(csv.filename), csv.filename);
+    /* JSON and Excel */
+    const js = JSON.parse(await (await XA.build(Object.assign({}, oa, { format: 'json' }))).blob.text());
+    eq([js.export.record_count, js.export.mapping, js.records[0].Site, Object.keys(js.records[0])], [3, 'Portal import', 'HQ', ['Device ID', 'Vendor', 'Management IP', 'Site', 'Notes']]);
+    const xl = await XA.build(Object.assign({}, oa, { format: 'xlsx' }));
+    const zipMap = await unzip(xl.blob);
+    assert(zipMap.has('xl/workbook.xml') && zipMap.has('xl/worksheets/sheet1.xml'), 'a workbook');
+    await save('asset_export_test.xlsx', xl.blob);
+    /* recorded only after the file is saved; then each asset knows it was exported, and when it changes after */
+    const code = XA.peekCode();
+    const rec = XA.record(oa, csv);
+    eq([rec.code, rec.record_count, rec.status, store.get('devices', v1.id).export_code, I.asset(store.get('devices', v1.id)).exportState], [code, 3, 'success', code, 'current']);
+    assert(XA.peekCode() !== code, 'the next export gets the next ID');
+    eq(XA.collect(Object.assign({}, oa, { which: 'new_or_changed' })).assets.length, 0, 'nothing new or changed right after');
+    I.update(store.get('devices', p1.id), { serial_number: 'TSW-SER-9' });
+    eq([I.asset(store.get('devices', p1.id)).exportState, XA.collect(Object.assign({}, oa, { which: 'changed' })).assets.map(function (d) { return d.id; })], ['changed', [p1.id]], 'a change after the export is picked up for the next one');
+    assert(store.all('activity_log').some(function (e) { return e.action === 'exported' && e.entity_code === code; }), 'the export is in the change history');
+    store.remove('devices', bad.id);
+  });
+  test('navigation: the inventory is the landing experience; every legacy screen keeps its route and is reachable; each new screen and sheet renders', async function () {
+    const ui = EV.ui;
+    ui.closeAll();
+    store.kvSet('show_legacy', false);
+    EV.go('/'); await wait(150);
+    assert(document.querySelector('.page-inventory') && /Inventory Dashboard/.test(document.querySelector('.page-title').textContent), 'the dashboard is the start page');
+    const nav = Array.prototype.map.call(document.querySelectorAll('.sidebar .nav-item'), function (a) { return a.textContent.trim().replace(/\d+$/, ''); });
+    eq(nav.slice(0, 6), ['Inventory Dashboard', 'Room Inventory', 'Identify Devices', 'Asset Registry', 'Export & Integration', 'Settings']);
+    assert(nav.indexOf('Room Audits') < 0 && nav.some(function (n) { return /^Legacy Command Center/.test(n); }), 'legacy sections are behind one link');
+    for (const n of EV.NAV) {
+      EV.go(n.path); await wait(80);
+      assert(!document.querySelector('.crash') && !/Page not found/.test(document.querySelector('.page-title').textContent), 'legacy route still works: ' + n.path);
+    }
+    assert(Array.prototype.some.call(document.querySelectorAll('.sidebar .nav-item'), function (a) { return /Room Audits/.test(a.textContent); }), 'inside the legacy center its sections are listed');
+    store.kvSet('show_legacy', true); EV.go('/'); await wait(100);
+    assert(Array.prototype.some.call(document.querySelectorAll('.sidebar .nav-item'), function (a) { return /Room Audits/.test(a.textContent); }), 'the setting shows them everywhere');
+    store.kvSet('show_legacy', false);
+    const room = store.get('rooms', store.get('devices', ctx.invA).room_id);
+    for (const p of ['/', '/rooms', '/rooms/floor/' + room.floor_id, '/rooms/room/' + room.id, '/identify', '/assets', '/assets?tab=review', '/assets?tab=duplicates', '/assets?filter=missing_mac', '/integration', '/settings']) {
+      EV.go(p); await wait(100);
+      assert(!document.querySelector('.crash') && !/Page not found/.test(document.querySelector('.page-title').textContent), p + ' renders');
+    }
+    EV.go('/rooms/room/' + room.id); await wait(100);
+    const fab = document.getElementById('fab-capture'), inp = fab && fab.querySelector('input[type=file]');
+    assert(fab && fab.tagName === 'LABEL' && inp && inp.getAttribute('capture') === 'environment', 'in a room the capture button opens the camera in one tap');
+    assert(document.getElementById('room-add-device'), 'the room has its Add device button');
+    EV.assets.open(ctx.invA); await wait(100);
+    assert(/Identity|Identifiers/.test(document.querySelector('.sheet').textContent), 'asset record');
+    ui.closeAll();
+    ID.open({ room: room }); await wait(100);
+    assert(document.getElementById('ident-camera') && document.getElementById('ident-confirm'), 'capture screen');
+    ui.closeAll();
+    XA.editMapping(null); await wait(100);
+    assert(document.getElementById('map-save'), 'mapping editor');
+    ui.closeAll();
+    EV.go('/'); await wait(50);
+  });
+  test('the device database and the cloud schema are upgraded in place: new tables exist, and the SQL adds new columns and value lists without touching existing rows', async function () {
+    for (const t of ['asset_identifications', 'asset_taxonomy', 'export_profiles', 'asset_exports']) await rawAll(t);
+    const sql = await (await fetch('../supabase/schema.sql', { cache: 'no-store' })).text();
+    ['make text', 'field_sources jsonb', 'manual_review boolean not null default false', 'export_sig text'].forEach(function (c) { assert(sql.indexOf('alter table public.devices add column if not exists ' + c + ';') >= 0, 'devices gets ' + c); });
+    assert(sql.indexOf('alter table public.rooms add column if not exists department text;') >= 0, 'rooms gets department');
+    assert(/alter table public\.devices drop constraint if exists devices_ip_status_check;\nalter table public\.devices add constraint devices_ip_status_check check \(ip_status is null or ip_status in \([^)]*'unavailable'/.test(sql), 'the identifier status list gains “unavailable” on an existing database');
+    assert(!/^\s+constraint \w+_check check \(\w+ is null or/m.test(sql), 'no value list is only inside a create table (which would not reach an existing database)');
+    eq(EV.exporter.columns('devices').filter(function (c) { return /export_sig|field_sources|identity_confirmed/.test(c); }), [], 'the daily export package is unchanged by the inventory bookkeeping');
+  });
+
+  test('inventory safeguards: a late AI answer never reopens a capture, a capture becomes one asset once, a re-run keeps the person\'s answers, and an edited verified value is no longer verified', async function () {
+    const room = invRoom('I-5');
+    let release;
+    EV.ai.transport = function (method) {
+      if (method === 'GET') return Promise.resolve({ enabled: true, configured: true, provider: 'stub', model: 's' });
+      return new Promise(function (res) { release = function () { res({ devices: [{ manufacturer: { value: 'Late', confidence: 'confirmed', evidence: 'logo' }, model: { value: 'L1', confidence: 'confirmed', evidence: 'label_text' } }] }); }; });
+    };
+    try {
+      const cap = ID.newCapture(room);
+      await ID.addPhotos(cap, [await imageFile('late')], 'front');
+      const running = ID.run(cap.id);
+      for (let i = 0; i < 40 && !release; i++) await wait(25);
+      ID.discard(cap.id);
+      release(); await running;
+      eq([store.get('asset_identifications', cap.id).status, store.get('asset_identifications', cap.id).result], ['discarded', null], 'the answer that arrives after a discard changes nothing');
+      const cap2 = ID.newCapture(room);
+      ID.setValue(cap2.id, 'category', 'Display'); ID.setValue(cap2.id, 'manufacturer', 'NEC'); ID.setValue(cap2.id, 'model', 'MA551');
+      ID.confirm(cap2.id);
+      let again = ''; try { ID.confirm(cap2.id); } catch (e) { again = e.message; }
+      eq([/already saved/.test(again), store.all('devices').filter(function (d) { return d.ai_identification_id === cap2.id; }).length], [true, 1], 'a second confirm adds nothing');
+    } finally { EV.ai.transport = null; }
+    /* a re-run keeps "not accessible", and a value the person chose from the suggestions */
+    const kept = ID.mergeDraft({ values: { model: 'X-2' }, sources: { model: 'ai' }, statuses: { serial_status: 'unavailable' }, picked: { model: true } },
+      { values: { model: 'X-1', serial_number: 'S1' }, sources: {}, statuses: { serial_status: 'unknown' }, suggest: {} });
+    eq([kept.values.model, kept.values.serial_number, kept.statuses.serial_status], ['X-2', undefined, 'unavailable']);
+    /* editing a verified identifier makes it unverified, in the asset and in a capture */
+    const d = I.create(room, { category: 'Display', manufacturer: 'NEC', model: 'MA431', serial_number: 'V-1', serial_status: 'verified_onsite' }, {}, { confirm: true });
+    eq([I.update(d, { serial_number: 'V-2' }).serial_status, I.update(store.get('devices', d.id), { notes: 'x' }).serial_status], ['unknown', 'unknown']);
+    const cap3 = ID.newCapture(room);
+    ID.setValue(cap3.id, 'serial_number', 'Q-1'); ID.setStatus(cap3.id, 'serial_status', 'verified_onsite'); ID.setValue(cap3.id, 'serial_number', 'Q-2');
+    eq(store.get('asset_identifications', cap3.id).draft.statuses.serial_status, 'unknown');
+    ID.discard(cap3.id);
+    /* the legacy device editor keeps the inventory rules */
+    const e = I.create(room, { category: 'Display', manufacturer: 'NEC', model: 'MA651' }, {}, { confirm: true });
+    const sheet = EV.editors.device(e.id); await wait(80);
+    const input = document.getElementById('f-' + sheet.id + '-model');
+    input.value = 'MA651-B'; input.dispatchEvent(new Event('input', { bubbles: true })); await wait(50);
+    const e2 = store.get('devices', e.id);
+    eq([e2.model, e2.field_sources.model, e2.identity_confirmed_at], ['MA651-B', 'manual', null]);
+    EV.ui.closeAll();
+  });
+  test('merge keeps the stronger verification and the confirmed identity, and brings over the technical details the kept record lacks', function () {
+    const room = invRoom('I-6');
+    const keep = I.create(room, { category: 'Other', manufacturer: 'Atlona', model: 'AT-OME-EX', serial_number: 'ATL-9', serial_status: 'unknown' }, {});
+    const drop = I.create(room, { category: 'HDMI receiver', manufacturer: 'Atlona', model: 'AT-OME-EX', serial_number: 'atl-9', serial_status: 'verified_onsite', firmware_version: '1.2.3',
+      switch_port: '1/0/7', warranty_info: 'Until 2028' }, {}, { confirm: true });
+    store.update('devices', keep.id, { custom_category: 'Extender kit' }, { silent: true });
+    const patch = I.mergePatch(store.get('devices', keep.id), drop, { category: true });
+    eq([patch.serial_status, patch.category, patch.custom_category, patch.firmware_version, patch.switch_port, patch.warranty_info, !!patch.identity_confirmed_at],
+      ['verified_onsite', 'HDMI receiver', '', '1.2.3', '1/0/7', 'Until 2028', true], 'same serial: the verified status wins; the identity that results is the confirmed one; technical details fill the gaps');
+    assert(I.mergeFills(store.get('devices', keep.id), drop).indexOf('firmware_version') >= 0, 'the merge sheet lists them');
+    I.merge(keep.id, drop.id, { category: true });
+    const k = store.get('devices', keep.id);
+    eq([k.serial_number, k.serial_status, k.firmware_version, I.asset(k).status], ['ATL-9', 'verified_onsite', '1.2.3', 'partial']);
+  });
+  test('export state: a change to the room, the building, a photograph or a technical field marks an exported asset as changed; a change during the save is not marked as exported', async function () {
+    const room = invRoom('I-7');
+    const d = I.create(room, { category: 'Camera', manufacturer: 'Sony', model: 'SRG-X400', serial_number: 'SONY-1', serial_status: 'verified_onsite', mac_status: 'unavailable', ip_status: 'unavailable' }, {}, { confirm: true });
+    const o = { scope: 'room', scopeId: room.id, which: 'all', include: 'all', profile: 'standard', format: 'csv' };
+    let built = await XA.build(o); XA.record(o, built);
+    eq(I.asset(store.get('devices', d.id)).exportState, 'current');
+    store.update('rooms', room.id, { department: 'Research' });
+    eq(I.asset(store.get('devices', d.id)).exportState, 'changed', 'a room change is seen at once (no stale cache)');
+    built = await XA.build(o); XA.record(o, built);
+    store.update('devices', d.id, { firmware_version: '9.9' });
+    eq(I.asset(store.get('devices', d.id)).exportState, 'changed', 'firmware is part of what can be exported');
+    built = await XA.build(o);
+    store.update('devices', d.id, { notes: 'edited while the file was being saved' });
+    XA.record(o, built);
+    eq(I.asset(store.get('devices', d.id)).exportState, 'changed', 'the record keeps the signature of what was written');
+  });
+  test('registry links show exactly what they name; the room page writes nothing while it is shown; an older workspace database is reported plainly', async function () {
+    EV.go('/assets?tab=duplicates'); await wait(80);
+    EV.go('/assets?filter=missing_mac'); await wait(80);
+    const on = document.querySelector('.tab.on');
+    eq([on && on.textContent.replace(/\d+$/, ''), document.querySelector('.toolbar select').value], ['Assets', 'missing_mac']);
+    const room = store.get('rooms', store.get('devices', ctx.invA).room_id);
+    EV.go('/rooms/room/' + room.id); await wait(300);
+    const v0 = store.version; await wait(700);
+    eq(store.version, v0, 'no write loop');
+    const prev = { adapter: EV.sync.adapter, enabled: store.syncEnabled, error: EV.sync.error };
+    EV.sync.adapter = { label: 'test', fetchSince: function () { return Promise.reject(Object.assign(new Error('Could not find the \'make\' column of \'devices\' in the schema cache'), { status: 400, code: 'PGRST204' })); },
+      upsert: function () { return Promise.resolve([]); } };
+    store.syncEnabled = true;
+    try {
+      await EV.sync.run();
+      assert(/older than this version/.test(EV.sync.error) && /schema\.sql/.test(EV.sync.error), EV.sync.error);
+    } finally { EV.sync.adapter = prev.adapter; store.syncEnabled = prev.enabled; EV.sync.error = prev.error; }
+    EV.go('/'); await wait(50);
   });
 
   /* ------------------------------------------------------------------ runner */

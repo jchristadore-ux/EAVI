@@ -17,18 +17,19 @@ This document states what the application does to protect that data, how each co
 |---|---|
 | A documentation and audit tool: people type what they observe and photograph what they see | A network scanner. It performs no discovery, probing, port scanning, SNMP, mDNS, ARP or device configuration, and has no code path that could |
 | A static web application with no server-side code of its own | A service that holds a copy of the data. In device-only mode the only copy is on the auditor's device |
-| Fully self-contained: 37 first-party files in the built site, no libraries, fonts, CDNs, analytics or telemetry | A client of any AI service. Nothing is sent to Claude or any other model by the application |
-| Explicit about what is unknown: missing identifiers stay missing and are flagged | An OCR tool. Nothing is read from photographs automatically |
+| Fully self-contained: 43 first-party files in the built site, no libraries, fonts, CDNs, analytics or telemetry | A direct client of any AI service. The browser holds no AI key and calls no model. Since 19 November 2026 a workspace can run a server-side AI identification function (flow 4); it is off until the operator authorizes it |
+| Explicit about what is unknown: missing identifiers stay missing and are flagged | Automatic. Photographs are read by an AI model only through flow 4, only when a person taps *Identify with AI*, and every value is reviewed and confirmed by a person before it is saved |
 
 ## 2. Data flows
 
-There are exactly three ways data can leave the browser's storage, and the first needs a deliberate tap every time.
+There are exactly four ways data can leave the browser's storage; the first and the fourth need a deliberate tap every time.
 
 | # | Flow | Trigger | Destination | Default |
 |---|---|---|---|---|
 | 1 | Daily export ZIP, reports (PDF / CSV / XLSX), master workbook, full backup ZIP, single photograph | The auditor taps an export / download / share button | A file on the device, or wherever the auditor sends it with the system share sheet | Available |
 | 2 | Cloud synchronisation | Automatic once a workspace is connected and the auditor has signed in | One Supabase project (database + private storage bucket) | **Off, and impossible in the default build** (see §3.1) |
 | 3 | Loading the application itself | Opening the site | The static host that serves the files | n/a |
+| 4 | Photographs of one device, for AI identification | The auditor taps *Identify with AI* (or turns on automatic identification on that device) | The workspace's `identify-device` function, which forwards the photographs and the category list - no room, building, user or network data - to the configured AI provider (an external service) | **Off**: needs a cloud workspace and the server secret `AI_IDENTIFICATION_ENABLED=true`, set only after approval 8 (§5). Never run so far ([AI_IDENTIFICATION.md](AI_IDENTIFICATION.md)) |
 
 Uploading an export package to a Claude Project is a separate human step outside the application. It sends client
 infrastructure data to an external AI service and therefore **needs the client's explicit authorisation**; the
@@ -214,6 +215,9 @@ the folder it writes to. It is not part of the product and must never be deploye
    backup and retention, administrator accounts, MFA.
 7. **AI data-use authorisation** — only if daily packages will be uploaded to a Claude Project: which Claude plan and
    workspace, what data may be uploaded, retention, who may access the Project.
+8. **AI identification authorisation** — only if AI identification of device photographs is wanted (flow 4): which
+   provider and model, the provider's data retention terms, which workspace. Record who approved it and when; only
+   then set `AI_IDENTIFICATION_ENABLED=true` on the server. Not recorded anywhere as of 19 November 2026.
 
 ## 6. Reporting a concern
 

@@ -1,5 +1,13 @@
 # Architecture
 
+> **Since 19 November 2026** the primary experience is the AV asset inventory. It is built on the same layers and
+> tables described here, plus six scripts (`inventory.js`, `identify.js`, `pages/inventory.js`, `pages/rooms.js`,
+> `pages/assets.js`, `pages/integration.js`), four tables (`asset_identifications`, `asset_taxonomy`,
+> `export_profiles`, `asset_exports`; IndexedDB version 2), new columns on rooms, devices and photos, and an optional
+> server function (`supabase/functions/identify-device`). The navigation now starts at the Inventory Dashboard; every
+> screen described below is the Legacy Command Center and keeps its route (the former dashboard is at `/legacy`).
+> Reference: [INVENTORY.md](INVENTORY.md). The rest of this document describes the code as it stood on 2026-11-12.
+
 This document describes how AV ENVIRONMENT INTELLIGENCE is built, as the code stood on 2026-11-12: its constraints, runtime layers, data model, on-device database, change history, rules engine, optional cloud schema and synchronisation, file engines, build output and tests. It is written for an engineer who has to maintain or review the system. It states what the code does and marks whatever has not been executed or tested. The application must be approved by client security before real infrastructure information is entered; nothing here states that this approval exists.
 
 ## 1. Constraints and decisions

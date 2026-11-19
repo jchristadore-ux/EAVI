@@ -5,8 +5,18 @@
   EV.pages = EV.pages || {};
   EV.editors = EV.editors || {};
 
+  /* The asset inventory is the primary experience. The earlier audit command center is kept whole, with every route it
+     had, as the Legacy Command Center: hidden from the main navigation unless chosen in Settings or open. */
+  const INV_NAV = (EV.INV_NAV = [
+    { path: '/', label: 'Inventory Dashboard', icon: 'home' },
+    { path: '/rooms', label: 'Room Inventory', icon: 'grid' },
+    { path: '/identify', label: 'Identify Devices', icon: 'camera' },
+    { path: '/assets', label: 'Asset Registry', icon: 'database' },
+    { path: '/integration', label: 'Export & Integration', icon: 'share' },
+    { path: '/settings', label: 'Settings', icon: 'sliders' }
+  ]);
   const NAV = (EV.NAV = [
-    { path: '/', label: 'Command Center', icon: 'home' },
+    { path: '/legacy', label: 'Command Center', icon: 'home' },
     { path: '/environment', label: 'Buildings & Floors', icon: 'building' },
     { path: '/audits', label: 'Room Audits', icon: 'clipboard' },
     { path: '/devices', label: 'Device Inventory', icon: 'cpu' },
@@ -15,14 +25,23 @@
     { path: '/coordination', label: 'IT Coordination', icon: 'message' },
     { path: '/spares', label: 'Spare Equipment', icon: 'package' },
     { path: '/reports', label: 'Reports', icon: 'file' },
-    { path: '/export', label: 'Daily Export & Data Handoff', icon: 'share' },
-    { path: '/settings', label: 'Settings', icon: 'sliders' }
+    { path: '/export', label: 'Daily Export & Data Handoff', icon: 'share' }
   ]);
+  const LEGACY_PATHS = NAV.map(function (n) { return n.path; });
+  EV.showLegacy = function () { return store.kvGet('show_legacy') === true; };
 
   function resolve() {
     const p = EV.router.parts;
     switch (p[0] || '') {
-      case '': return { page: 'command', nav: '/' };
+      case '': return { page: 'inventory', nav: '/' };
+      case 'rooms':
+        if (p[1] === 'floor') return { page: 'roomsFloor', nav: '/rooms', id: p[2] };
+        if (p[1] === 'room') return { page: 'roomsRoom', nav: '/rooms', id: p[2] };
+        return { page: 'rooms', nav: '/rooms' };
+      case 'identify': return { page: 'identify', nav: '/identify' };
+      case 'assets': return { page: 'assets', nav: '/assets' };
+      case 'integration': return { page: 'integration', nav: '/integration' };
+      case 'legacy': return { page: 'command', nav: '/legacy' };
       case 'environment': return { page: 'environment', nav: '/environment' };
       case 'floor': return { page: 'floor', nav: '/environment', id: p[1] };
       case 'room': return { page: 'room', nav: '/environment', id: p[1] };
@@ -44,8 +63,30 @@
     const p = EV.router.parts;
     if (p[0] === 'audit') { const a = store.get('audits', p[1]); if (a) return { audit: a, room: R.auditRooms(a)[0] || null }; }
     if (p[0] === 'room') { const r = store.get('rooms', p[1]); if (r) return { room: r, audit: A.openAudit({ room: r }) }; }
+    if (p[0] === 'rooms' && p[1] === 'room') { const r = store.get('rooms', p[2]); if (r) return { room: r, inventory: true }; }
     return {};
   };
+  function isLegacy(r) { return LEGACY_PATHS.indexOf(r.nav) >= 0; }
+  EV.isLegacyRoute = function () { return isLegacy(resolve()); };
+  /* The capture button: in a room it opens the camera at once (a file input inside a label: no scripted click);
+     anywhere else it asks for the room first. */
+  function captureControl(cls, children, id) {
+    const ctx = EV.context();
+    if (ctx.room && ctx.inventory && !store.readOnly) {
+      const inputId = 'cap-' + id + '-' + ctx.room.id;
+      return h('label', { 'class': U.cx(cls, 'capture'), 'for': inputId, role: 'button', id: id, key: id + ctx.room.id, 'aria-label': 'Photograph a device in ' + R.roomLabel(ctx.room) },
+        children,
+        h('input', { id: inputId, type: 'file', accept: 'image/*', capture: 'environment', 'class': 'file-input', tabindex: '-1', onchange: function (e) {
+          const files = Array.prototype.slice.call(e.target.files || []);
+          e.target.value = '';
+          const room = store.get('rooms', ctx.room.id);
+          if (!files.length || !room) return undefined;
+          const cap = EV.identify.newCapture(room);
+          return EV.identify.addPhotos(cap, files, 'front').then(function () { EV.identify.open({ capture: cap.id }); });
+        } }));
+    }
+    return h('button', { type: 'button', 'class': cls, id: id, 'aria-label': 'Photograph a device', onclick: function () { EV.identify.startAnywhere(); } }, children);
+  }
   EV.onRoute = function () {
     ui.closeAll();
     const ctx = EV.context();
@@ -146,39 +187,52 @@
     const sheet = ui.openSheet({
       title: 'All sections', size: 'auto',
       render: function () {
-        return h('div.action-list', null, NAV.map(function (n) {
+        const item = function (n) {
           return h('button', { type: 'button', key: n.path, 'class': U.cx('action', r.nav === n.path && 'action-on'), onclick: function () { ui.closeSheet(sheet); EV.go(n.path); } },
             h('span.action-ic', null, icon(n.icon, 20)), h('span.action-text', null, h('span.action-label', null, n.label)), icon('chev-right', 16, 'row-chev'));
-        }));
+        };
+        const legacy = isLegacy(r) || EV.showLegacy();
+        return h('div.stack', null,
+          h('div.action-list', null, INV_NAV.map(item)),
+          legacy ? [ui.label('Legacy Command Center', null), h('div.action-list', { key: 'leg' }, NAV.map(item))]
+            : h('div.action-list', null, item({ path: '/legacy', label: 'Legacy Command Center', icon: 'archive' })));
       }
     });
   }
 
   /* ------------------------------------------------------------------ frame */
-  function badges() {
-    const m = R.metrics();
-    return { '/devices': m.devicesIncomplete, '/backlog': m.p1, '/coordination': m.requestsOpen, '/audits': m.roomsInProgress };
+  function badges(legacy) {
+    const m = EV.inv.metrics();
+    const out = { '/identify': m.awaiting };
+    if (legacy) { const lm = R.metrics(); out['/devices'] = lm.devicesIncomplete; out['/backlog'] = lm.p1; out['/coordination'] = lm.requestsOpen; out['/audits'] = lm.roomsInProgress; }
+    return out;
   }
   function sidebar(r) {
-    const bd = badges();
+    const legacy = isLegacy(r) || EV.showLegacy();
+    const bd = badges(legacy);
     const prof = EV.auth.profile();
+    const link = function (n, cls) {
+      return h('a', { key: n.path, href: '#' + n.path, 'class': U.cx('nav-item', cls, r.nav === n.path && 'on'), 'aria-current': r.nav === n.path ? 'page' : null,
+        onclick: function (e) { e.preventDefault(); EV.go(n.path); } },
+        icon(n.icon, 18), h('span.nav-label', null, n.label), bd[n.path] ? h('span.nav-badge', null, String(bd[n.path])) : null);
+    };
     return h('aside.sidebar', null,
       h('div.sidebar-brand', null, EV.brand({ stack: true })),
-      ui.btn('New', { kind: 'primary', icon: 'plus', block: true, cls: 'sidebar-new', onclick: openNew }),
-      h('nav.nav', { 'aria-label': 'Sections' }, NAV.map(function (n) {
-        return h('a', { key: n.path, href: '#' + n.path, 'class': U.cx('nav-item', r.nav === n.path && 'on'), 'aria-current': r.nav === n.path ? 'page' : null,
-          onclick: function (e) { e.preventDefault(); EV.go(n.path); } },
-          icon(n.icon, 18), h('span.nav-label', null, n.label), bd[n.path] ? h('span.nav-badge', null, String(bd[n.path])) : null);
-      })),
+      isLegacy(r) ? ui.btn('New', { kind: 'primary', icon: 'plus', block: true, cls: 'sidebar-new', onclick: openNew })
+        : captureControl('btn btn-primary btn-block sidebar-new', [icon('camera', 17), h('span', { key: 's' }, 'Photograph device')], 'sidebar-capture'),
+      h('nav.nav', { 'aria-label': 'Sections' },
+        INV_NAV.map(function (n) { return link(n); }),
+        legacy ? [h('div.nav-group', { key: 'lg' }, 'Legacy Command Center'), NAV.map(function (n) { return link(n, 'nav-legacy'); })]
+          : link({ path: '/legacy', label: 'Legacy Command Center', icon: 'archive' }, 'nav-legacy')),
       h('div.sidebar-foot', null,
         h('div.who', null, h('span.who-avatar', null, icon('user', 15)), h('span.who-text', null, h('span.who-name', null, prof.name || 'Auditor'), h('span.who-role', null, EV.S.label(EV.S.ROLES, prof.role || 'lead_auditor')))),
         h('div.sidebar-meta', null, 'v' + EV.APP.version + ' · ' + (store.isMemoryOnly() ? 'memory only' : 'device storage'))));
   }
   function topbar(r) {
-    const cur = NAV.find(function (n) { return n.path === r.nav; });
+    const cur = INV_NAV.concat(NAV).find(function (n) { return n.path === r.nav; });
     return h('div.topbar', null,
-      h('button.topbar-brand', { type: 'button', 'aria-label': 'Command Center', onclick: function () { EV.go('/'); } }, EV.brand({ compact: true, size: 24 })),
-      h('div.topbar-section', null, cur ? cur.label : ''),
+      h('button.topbar-brand', { type: 'button', 'aria-label': 'Inventory Dashboard', onclick: function () { EV.go('/'); } }, EV.brand({ compact: true, size: 24 })),
+      h('div.topbar-section', null, cur ? (isLegacy(r) ? 'Legacy · ' : '') + cur.label : ''),
       h('span.grow'),
       navigator.onLine === false ? ui.chip('Offline', 'warn', { icon: 'cloud-off', title: 'No network connection — the app keeps working and saving on this device' }) : null,
       saveIndicator(),
@@ -188,22 +242,30 @@
     function tab(path, label, ic) {
       return h('button', { type: 'button', 'class': U.cx('bn-item', r.nav === path && 'on'), 'aria-current': r.nav === path ? 'page' : null, onclick: function () { EV.go(path); } }, icon(ic, 21), h('span', null, label));
     }
-    const main = ['/', '/audits', '/backlog'];
+    if (isLegacy(r)) {
+      const main = ['/legacy', '/audits', '/backlog'];
+      return h('nav.bottomnav', { 'aria-label': 'Primary' },
+        tab('/legacy', 'Legacy', 'home'), tab('/audits', 'Audits', 'clipboard'),
+        h('button.fab', { type: 'button', 'aria-label': 'New — quick actions', id: 'fab-new', onclick: openNew }, icon('plus', 20), h('span', null, 'NEW')),
+        tab('/backlog', 'Backlog', 'flag'),
+        h('button', { type: 'button', 'class': U.cx('bn-item', main.indexOf(r.nav) < 0 && 'on'), id: 'bn-more', onclick: function () { openMore(r); } }, icon('menu', 21), h('span', null, 'More')));
+    }
+    const mainInv = ['/', '/rooms', '/assets'];
     return h('nav.bottomnav', { 'aria-label': 'Primary' },
-      tab('/', 'Home', 'home'), tab('/audits', 'Audits', 'clipboard'),
-      h('button.fab', { type: 'button', 'aria-label': 'New — quick actions', id: 'fab-new', onclick: openNew }, icon('plus', 20), h('span', null, 'NEW')),
-      tab('/backlog', 'Backlog', 'flag'),
-      h('button', { type: 'button', 'class': U.cx('bn-item', main.indexOf(r.nav) < 0 && 'on'), id: 'bn-more', onclick: function () { openMore(r); } }, icon('menu', 21), h('span', null, 'More')));
+      tab('/', 'Home', 'home'), tab('/rooms', 'Rooms', 'grid'),
+      captureControl('fab', [icon('camera', 20), h('span', { key: 's' }, 'CAPTURE')], 'fab-capture'),
+      tab('/assets', 'Assets', 'database'),
+      h('button', { type: 'button', 'class': U.cx('bn-item', mainInv.indexOf(r.nav) < 0 && 'on'), id: 'bn-more', onclick: function () { openMore(r); } }, icon('menu', 21), h('span', null, 'More')));
   }
   function crashPanel(err) {
     return h('div.crash', null,
       ui.note('danger', 'This screen could not be displayed. Your saved data is not affected.', { title: 'Something went wrong' }),
       h('pre.crash-detail', null, String((err && err.message) || err)),
-      h('div.btn-row', null, ui.btn('Command Center', { kind: 'primary', onclick: function () { EV.go('/', { replace: true }); } }), ui.btn('Reload', { onclick: function () { location.reload(); } })));
+      h('div.btn-row', null, ui.btn('Inventory Dashboard', { kind: 'primary', onclick: function () { EV.go('/', { replace: true }); } }), ui.btn('Reload', { onclick: function () { location.reload(); } })));
   }
   EV.renderCrash = crashPanel;
   EV.pages.notFound = function () {
-    return [ui.head({ title: 'Page not found' }), ui.empty({ icon: 'help', title: 'That screen does not exist', action: ui.btn('Command Center', { kind: 'primary', onclick: function () { EV.go('/', { replace: true }); } }) })];
+    return [ui.head({ title: 'Page not found' }), ui.empty({ icon: 'help', title: 'That screen does not exist', action: ui.btn('Inventory Dashboard', { kind: 'primary', onclick: function () { EV.go('/', { replace: true }); } }) })];
   };
   function view() {
     const gate = EV.auth.gate();

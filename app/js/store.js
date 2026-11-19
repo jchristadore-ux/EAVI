@@ -7,7 +7,7 @@
   'use strict';
   const EV = window.EV, U = EV.U, S = EV.S;
   const DB_NAME = window.EV_DB_NAME || 'av_environment_intelligence'; /* the test suite uses its own database */
-  const DB_VERSION = 1;
+  const DB_VERSION = 2;   /* 2: asset inventory tables (asset_identifications, asset_taxonomy, export_profiles, asset_exports) */
   const BACKUP_FORMAT = 'av-environment-intelligence-backup';
   /* Legacy names. Earlier versions of the application carried their first client's name in the database name, the
      backup format tag, the organization name they filled in by themselves, and four party / status values. They are
@@ -20,13 +20,13 @@
     'Pending Evercore IT': 'Pending Client IT', 'Pending Evercore Approval': 'Pending Client Approval' };
   const MOVED_KEY = 'legacy_db_moved', RENAMED_KEY = 'legacy_values_renamed';
   /* Not part of the change history: the log itself, export bookkeeping, per-device view state and derived follow-up tasks. */
-  const NO_LOG = { activity_log: 1, exports: 1, insight_states: 1, followups: 1, profiles: 1, organizations: 1 };
+  const NO_LOG = { activity_log: 1, exports: 1, insight_states: 1, followups: 1, profiles: 1, organizations: 1, asset_identifications: 1, asset_exports: 1 };
   /* Recorded as DETAIL entries: every change is in the exported change history with who, when and from → to, but the
      activity feed shows one rolling line per audit instead of one line per tap. */
   const DETAIL = { functional_tests: 1, network_checks: 1, audit_notes: 1, audit_sections: 1, switch_ports: 1, network_links: 1, backlog_it_links: 1,
     room_configuration_members: 1, photos: 1 };
   /* bookkeeping fields that are not a change anyone made */
-  const UNLOGGED_FIELDS = { thumb: 1, remote_ref: 1, remote_edit_ref: 1, sort_order: 1, tested_at: 1, checked_at: 1, status_changed_at: 1 };
+  const UNLOGGED_FIELDS = { thumb: 1, remote_ref: 1, remote_edit_ref: 1, sort_order: 1, tested_at: 1, checked_at: 1, status_changed_at: 1, phash: 1 };
   const STATUS_TABLES = { backlog_items: 1, it_requests: 1, audits: 1 };
   const EMPTY = Object.freeze([]);
 

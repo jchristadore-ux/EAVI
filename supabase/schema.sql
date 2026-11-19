@@ -2,7 +2,9 @@
 -- AV ENVIRONMENT INTELLIGENCE  -  PostgreSQL / Supabase schema
 -- GENERATED from app/js/schema.js by tools/gen-schema.js. Do not edit by hand; regenerate instead.
 --
--- Apply once, in the Supabase SQL editor, to a project that has been approved for this data.
+-- Apply in the Supabase SQL editor, to a project that has been approved for this data. Safe to run again: on a
+-- database made from an earlier version it adds the new tables and columns and refreshes constraints, policies and
+-- triggers, and changes no existing row.
 -- Contents: tables, foreign keys, indexes, value constraints, change triggers, server-side audit trail,
 --           row-level security (organization membership + role), private photograph bucket and its policies.
 -- Model:    every row belongs to an organization (org_id). A signed-in user may read rows of organizations they
@@ -171,6 +173,10 @@ create table if not exists public.rooms (
   operational_status text,
   notes text,
   archived boolean not null default false,
+  department text,
+  inventory_status text,
+  inventory_completed_at timestamptz,
+  inventory_completed_by text,
   created_at timestamptz not null,
   updated_at timestamptz not null,
   created_by text,
@@ -252,7 +258,6 @@ create table if not exists public.audits (
   verified_at timestamptz,
   summary_snapshot jsonb,
   general_notes text,
-  constraint audits_status_check check (status is null or status in ('in_progress', 'complete', 'verified', '')),
   constraint audits_target_check check (room_id is not null or configuration_id is not null),
   created_at timestamptz not null,
   updated_at timestamptz not null,
@@ -287,7 +292,6 @@ create table if not exists public.audit_notes (
   section_key text,
   note_type text,
   text text,
-  constraint audit_notes_note_type_check check (note_type is null or note_type in ('observed_fact', 'auditor_interpretation', 'unverified_hypothesis', 'recommended_action', '')),
   created_at timestamptz not null,
   updated_at timestamptz not null,
   created_by text,
@@ -312,8 +316,6 @@ create table if not exists public.functional_tests (
   suggestion_state text,
   is_custom boolean not null default false,
   sort_order integer,
-  constraint functional_tests_result_check check (result is null or result in ('pass', 'fail', 'investigate', 'na', 'not_tested', '')),
-  constraint functional_tests_suggestion_state_check check (suggestion_state is null or suggestion_state in ('none', 'pending', 'accepted', 'dismissed', '')),
   created_at timestamptz not null,
   updated_at timestamptz not null,
   created_by text,
@@ -334,7 +336,6 @@ create table if not exists public.network_checks (
   comment text,
   checked_at timestamptz,
   sort_order integer,
-  constraint network_checks_status_check check (status is null or status in ('verified', 'issue', 'awaiting_it', 'na', 'not_checked', '')),
   created_at timestamptz not null,
   updated_at timestamptz not null,
   created_by text,
@@ -371,8 +372,6 @@ create table if not exists public.infra_assets (
   source text,
   notes text,
   archived boolean not null default false,
-  constraint infra_assets_asset_type_check check (asset_type is null or asset_type in ('switch', 'vlan', 'subnet', 'ip_range', 'dhcp_reservation', 'static_ip', 'dns_record', 'dns_server', 'ntp_server', 'firewall_rule', 'multicast', 'qos', 'monitoring', 'other', '')),
-  constraint infra_assets_validation_status_check check (validation_status is null or validation_status in ('observed', 'from_docs', 'it_validated', 'awaiting_it', 'unknown', '')),
   created_at timestamptz not null,
   updated_at timestamptz not null,
   created_by text,
@@ -381,6 +380,32 @@ create table if not exists public.infra_assets (
   is_demo boolean not null default false,
   server_updated_at timestamptz not null default clock_timestamp(),
   constraint infra_assets_updated_after_created check (updated_at >= created_at)
+);
+create table if not exists public.asset_identifications (
+  id uuid primary key,
+  org_id uuid not null references public.organizations(id),
+  building_id uuid,
+  floor_id uuid,
+  room_id uuid,
+  device_id uuid,
+  status text,
+  provider text,
+  model text,
+  requested_at timestamptz,
+  completed_at timestamptz,
+  result jsonb,
+  error text,
+  selected_index integer,
+  draft jsonb,
+  notes text,
+  created_at timestamptz not null,
+  updated_at timestamptz not null,
+  created_by text,
+  updated_by text,
+  deleted_at timestamptz,
+  is_demo boolean not null default false,
+  server_updated_at timestamptz not null default clock_timestamp(),
+  constraint asset_identifications_updated_after_created check (updated_at >= created_at)
 );
 create table if not exists public.devices (
   id uuid primary key,
@@ -423,9 +448,20 @@ create table if not exists public.devices (
   support_expiration date,
   notes text,
   archived boolean not null default false,
-  constraint devices_ip_status_check check (ip_status is null or ip_status in ('verified_onsite', 'verified_mgmt', 'awaiting_it', 'awaiting_vendor', 'unknown', 'not_applicable', '')),
-  constraint devices_mac_status_check check (mac_status is null or mac_status in ('verified_onsite', 'verified_mgmt', 'awaiting_it', 'awaiting_vendor', 'unknown', 'not_applicable', '')),
-  constraint devices_serial_status_check check (serial_status is null or serial_status in ('verified_onsite', 'verified_mgmt', 'awaiting_it', 'awaiting_vendor', 'unknown', 'not_applicable', '')),
+  make text,
+  product_family text,
+  asset_tag text,
+  identity_confirmed_at timestamptz,
+  identity_confirmed_by text,
+  field_sources jsonb,
+  manual_review boolean not null default false,
+  last_verified_at timestamptz,
+  ai_identification_id uuid,
+  merged_into uuid,
+  distinct_from jsonb,
+  exported_at timestamptz,
+  export_code text,
+  export_sig text,
   created_at timestamptz not null,
   updated_at timestamptz not null,
   created_by text,
@@ -474,7 +510,6 @@ create table if not exists public.network_links (
   description text,
   status text,
   notes text,
-  constraint network_links_kind_check check (kind is null or kind in ('uplink', 'dependency', '')),
   created_at timestamptz not null,
   updated_at timestamptz not null,
   created_by text,
@@ -524,9 +559,6 @@ create table if not exists public.backlog_items (
   target_date date,
   completed_at timestamptz,
   systemic boolean not null default false,
-  constraint backlog_items_priority_check check (priority is null or priority in ('', 'P1', 'P2', 'P3')),
-  constraint backlog_items_status_check check (status is null or status in ('New Discovery', 'Under Investigation', 'Pending PepperDash Review', 'Pending Client IT', 'Pending Client Approval', 'Approved', 'Scheduled', 'In Progress', 'Blocked', 'Completed', 'Deferred', 'Rejected', '')),
-  constraint backlog_items_root_cause_confidence_check check (root_cause_confidence is null or root_cause_confidence in ('not_determined', 'hypothesis', 'probable', 'confirmed', '')),
   constraint backlog_items_root_cause_confirmed_check check (root_cause_confidence = 'confirmed' or coalesce(root_cause, '') = ''),
   created_at timestamptz not null,
   updated_at timestamptz not null,
@@ -559,9 +591,6 @@ create table if not exists public.findings (
   backlog_item_id uuid,
   source text,
   source_key text,
-  constraint findings_status_check check (status is null or status in ('open', 'linked', 'duplicate', 'dismissed', '')),
-  constraint findings_classification_check check (classification is null or classification in ('observed_fact', 'auditor_interpretation', 'unverified_hypothesis', '')),
-  constraint findings_priority_hint_check check (priority_hint is null or priority_hint in ('', 'P1', 'P2', 'P3')),
   created_at timestamptz not null,
   updated_at timestamptz not null,
   created_by text,
@@ -594,8 +623,6 @@ create table if not exists public.it_requests (
   response_date date,
   documentation text,
   source_key text,
-  constraint it_requests_status_check check (status is null or status in ('Draft', 'Submitted', 'Acknowledged', 'In Progress', 'Awaiting Response', 'Answered', 'Closed', 'Cancelled', '')),
-  constraint it_requests_requested_from_check check (requested_from is null or requested_from in ('Client IT', 'PepperDash', 'Vendor', 'Facilities', '')),
   created_at timestamptz not null,
   updated_at timestamptz not null,
   created_by text,
@@ -640,7 +667,6 @@ create table if not exists public.spare_items (
   eol_date date,
   notes text,
   archived boolean not null default false,
-  constraint spare_items_lifecycle_check check (lifecycle is null or lifecycle in ('active', 'approaching_eol', 'eol', 'unknown', '')),
   constraint spare_items_quantity_check check (coalesce(quantity, 0) >= 0 and coalesce(min_stock, 0) >= 0),
   created_at timestamptz not null,
   updated_at timestamptz not null,
@@ -677,6 +703,9 @@ create table if not exists public.photos (
   thumb text,
   remote_ref text,
   remote_edit_ref text,
+  identification_id uuid,
+  phash text,
+  crop_of uuid,
   created_at timestamptz not null,
   updated_at timestamptz not null,
   created_by text,
@@ -699,7 +728,6 @@ create table if not exists public.followups (
   resolved_at timestamptz,
   it_request_id uuid,
   dedupe_key text,
-  constraint followups_status_check check (status is null or status in ('open', 'resolved', 'dismissed', '')),
   created_at timestamptz not null,
   updated_at timestamptz not null,
   created_by text,
@@ -773,6 +801,524 @@ create table if not exists public.exports (
   server_updated_at timestamptz not null default clock_timestamp(),
   constraint exports_updated_after_created check (updated_at >= created_at)
 );
+create table if not exists public.asset_taxonomy (
+  id uuid primary key,
+  org_id uuid not null references public.organizations(id),
+  kind text,
+  name text,
+  group_name text,
+  archived boolean not null default false,
+  sort_order numeric,
+  notes text,
+  created_at timestamptz not null,
+  updated_at timestamptz not null,
+  created_by text,
+  updated_by text,
+  deleted_at timestamptz,
+  is_demo boolean not null default false,
+  server_updated_at timestamptz not null default clock_timestamp(),
+  constraint asset_taxonomy_updated_after_created check (updated_at >= created_at)
+);
+create table if not exists public.export_profiles (
+  id uuid primary key,
+  org_id uuid not null references public.organizations(id),
+  name text,
+  target_system text,
+  format text,
+  mapping jsonb,
+  options jsonb,
+  notes text,
+  archived boolean not null default false,
+  created_at timestamptz not null,
+  updated_at timestamptz not null,
+  created_by text,
+  updated_by text,
+  deleted_at timestamptz,
+  is_demo boolean not null default false,
+  server_updated_at timestamptz not null default clock_timestamp(),
+  constraint export_profiles_updated_after_created check (updated_at >= created_at)
+);
+create table if not exists public.asset_exports (
+  id uuid primary key,
+  org_id uuid not null references public.organizations(id),
+  profile_id uuid,
+  profile_name text,
+  format text,
+  scope jsonb,
+  record_count integer,
+  counts jsonb,
+  validation jsonb,
+  filename text,
+  exported_by text,
+  status text,
+  created_at timestamptz not null,
+  updated_at timestamptz not null,
+  created_by text,
+  updated_by text,
+  deleted_at timestamptz,
+  is_demo boolean not null default false,
+  server_updated_at timestamptz not null default clock_timestamp(),
+  constraint asset_exports_updated_after_created check (updated_at >= created_at)
+);
+
+-- ---------------------------------------------------------------- columns added since the first version (no-ops on a new database)
+alter table public.buildings add column if not exists name text;
+alter table public.buildings add column if not exists address text;
+alter table public.buildings add column if not exists identifier text;
+alter table public.buildings add column if not exists floors_count integer;
+alter table public.buildings add column if not exists site_contact text;
+alter table public.buildings add column if not exists notes text;
+alter table public.buildings add column if not exists archived boolean not null default false;
+alter table public.floors add column if not exists building_id uuid;
+alter table public.floors add column if not exists number text;
+alter table public.floors add column if not exists designation text;
+alter table public.floors add column if not exists infrastructure_notes text;
+alter table public.floors add column if not exists audit_status_override text;
+alter table public.floors add column if not exists sort_order numeric;
+alter table public.floors add column if not exists archived boolean not null default false;
+alter table public.areas add column if not exists building_id uuid;
+alter table public.areas add column if not exists floor_id uuid;
+alter table public.areas add column if not exists name text;
+alter table public.areas add column if not exists description text;
+alter table public.areas add column if not exists archived boolean not null default false;
+alter table public.rooms add column if not exists building_id uuid;
+alter table public.rooms add column if not exists floor_id uuid;
+alter table public.rooms add column if not exists area_id uuid;
+alter table public.rooms add column if not exists code text;
+alter table public.rooms add column if not exists name text;
+alter table public.rooms add column if not exists number text;
+alter table public.rooms add column if not exists room_type text;
+alter table public.rooms add column if not exists capacity integer;
+alter table public.rooms add column if not exists criticality text;
+alter table public.rooms add column if not exists conferencing_platform text;
+alter table public.rooms add column if not exists control_platform text;
+alter table public.rooms add column if not exists dsp_platform text;
+alter table public.rooms add column if not exists display_config text;
+alter table public.rooms add column if not exists camera_config text;
+alter table public.rooms add column if not exists microphone_config text;
+alter table public.rooms add column if not exists scheduling_platform text;
+alter table public.rooms add column if not exists operational_status text;
+alter table public.rooms add column if not exists notes text;
+alter table public.rooms add column if not exists archived boolean not null default false;
+alter table public.rooms add column if not exists department text;
+alter table public.rooms add column if not exists inventory_status text;
+alter table public.rooms add column if not exists inventory_completed_at timestamptz;
+alter table public.rooms add column if not exists inventory_completed_by text;
+alter table public.room_configurations add column if not exists building_id uuid;
+alter table public.room_configurations add column if not exists floor_id uuid;
+alter table public.room_configurations add column if not exists code text;
+alter table public.room_configurations add column if not exists name text;
+alter table public.room_configurations add column if not exists description text;
+alter table public.room_configurations add column if not exists capacity integer;
+alter table public.room_configurations add column if not exists notes text;
+alter table public.room_configurations add column if not exists archived boolean not null default false;
+alter table public.room_configuration_members add column if not exists configuration_id uuid;
+alter table public.room_configuration_members add column if not exists room_id uuid;
+alter table public.racks add column if not exists building_id uuid;
+alter table public.racks add column if not exists floor_id uuid;
+alter table public.racks add column if not exists room_id uuid;
+alter table public.racks add column if not exists code text;
+alter table public.racks add column if not exists name text;
+alter table public.racks add column if not exists location text;
+alter table public.racks add column if not exists height_ru integer;
+alter table public.racks add column if not exists notes text;
+alter table public.racks add column if not exists archived boolean not null default false;
+alter table public.audits add column if not exists code text;
+alter table public.audits add column if not exists building_id uuid;
+alter table public.audits add column if not exists floor_id uuid;
+alter table public.audits add column if not exists room_id uuid;
+alter table public.audits add column if not exists configuration_id uuid;
+alter table public.audits add column if not exists audit_date date;
+alter table public.audits add column if not exists auditor text;
+alter table public.audits add column if not exists status text;
+alter table public.audits add column if not exists operational_status text;
+alter table public.audits add column if not exists started_at timestamptz;
+alter table public.audits add column if not exists completed_at timestamptz;
+alter table public.audits add column if not exists verified_at timestamptz;
+alter table public.audits add column if not exists summary_snapshot jsonb;
+alter table public.audits add column if not exists general_notes text;
+alter table public.audit_sections add column if not exists audit_id uuid;
+alter table public.audit_sections add column if not exists section_key text;
+alter table public.audit_sections add column if not exists state text;
+alter table public.audit_sections add column if not exists notes text;
+alter table public.audit_notes add column if not exists audit_id uuid;
+alter table public.audit_notes add column if not exists room_id uuid;
+alter table public.audit_notes add column if not exists section_key text;
+alter table public.audit_notes add column if not exists note_type text;
+alter table public.audit_notes add column if not exists text text;
+alter table public.functional_tests add column if not exists audit_id uuid;
+alter table public.functional_tests add column if not exists room_id uuid;
+alter table public.functional_tests add column if not exists category text;
+alter table public.functional_tests add column if not exists test_key text;
+alter table public.functional_tests add column if not exists test_name text;
+alter table public.functional_tests add column if not exists result text;
+alter table public.functional_tests add column if not exists comment text;
+alter table public.functional_tests add column if not exists tested_at timestamptz;
+alter table public.functional_tests add column if not exists finding_id uuid;
+alter table public.functional_tests add column if not exists suggestion_state text;
+alter table public.functional_tests add column if not exists is_custom boolean not null default false;
+alter table public.functional_tests add column if not exists sort_order integer;
+alter table public.network_checks add column if not exists audit_id uuid;
+alter table public.network_checks add column if not exists room_id uuid;
+alter table public.network_checks add column if not exists check_key text;
+alter table public.network_checks add column if not exists check_name text;
+alter table public.network_checks add column if not exists status text;
+alter table public.network_checks add column if not exists comment text;
+alter table public.network_checks add column if not exists checked_at timestamptz;
+alter table public.network_checks add column if not exists sort_order integer;
+alter table public.infra_assets add column if not exists code text;
+alter table public.infra_assets add column if not exists asset_type text;
+alter table public.infra_assets add column if not exists name text;
+alter table public.infra_assets add column if not exists identifier text;
+alter table public.infra_assets add column if not exists description text;
+alter table public.infra_assets add column if not exists building_id uuid;
+alter table public.infra_assets add column if not exists floor_id uuid;
+alter table public.infra_assets add column if not exists room_id uuid;
+alter table public.infra_assets add column if not exists device_id uuid;
+alter table public.infra_assets add column if not exists model text;
+alter table public.infra_assets add column if not exists hostname text;
+alter table public.infra_assets add column if not exists management_ip text;
+alter table public.infra_assets add column if not exists ip_address text;
+alter table public.infra_assets add column if not exists mac_address text;
+alter table public.infra_assets add column if not exists vlan text;
+alter table public.infra_assets add column if not exists subnet text;
+alter table public.infra_assets add column if not exists gateway text;
+alter table public.infra_assets add column if not exists assignment_type text;
+alter table public.infra_assets add column if not exists poe_budget_w numeric;
+alter table public.infra_assets add column if not exists poe_used_w numeric;
+alter table public.infra_assets add column if not exists validation_status text;
+alter table public.infra_assets add column if not exists source text;
+alter table public.infra_assets add column if not exists notes text;
+alter table public.infra_assets add column if not exists archived boolean not null default false;
+alter table public.asset_identifications add column if not exists building_id uuid;
+alter table public.asset_identifications add column if not exists floor_id uuid;
+alter table public.asset_identifications add column if not exists room_id uuid;
+alter table public.asset_identifications add column if not exists device_id uuid;
+alter table public.asset_identifications add column if not exists status text;
+alter table public.asset_identifications add column if not exists provider text;
+alter table public.asset_identifications add column if not exists model text;
+alter table public.asset_identifications add column if not exists requested_at timestamptz;
+alter table public.asset_identifications add column if not exists completed_at timestamptz;
+alter table public.asset_identifications add column if not exists result jsonb;
+alter table public.asset_identifications add column if not exists error text;
+alter table public.asset_identifications add column if not exists selected_index integer;
+alter table public.asset_identifications add column if not exists draft jsonb;
+alter table public.asset_identifications add column if not exists notes text;
+alter table public.devices add column if not exists code text;
+alter table public.devices add column if not exists building_id uuid;
+alter table public.devices add column if not exists floor_id uuid;
+alter table public.devices add column if not exists room_id uuid;
+alter table public.devices add column if not exists rack_id uuid;
+alter table public.devices add column if not exists audit_id uuid;
+alter table public.devices add column if not exists category text;
+alter table public.devices add column if not exists custom_category text;
+alter table public.devices add column if not exists role text;
+alter table public.devices add column if not exists manufacturer text;
+alter table public.devices add column if not exists model text;
+alter table public.devices add column if not exists hostname text;
+alter table public.devices add column if not exists ip_address text;
+alter table public.devices add column if not exists ip_status text;
+alter table public.devices add column if not exists mac_address text;
+alter table public.devices add column if not exists mac_status text;
+alter table public.devices add column if not exists serial_number text;
+alter table public.devices add column if not exists serial_status text;
+alter table public.devices add column if not exists subnet text;
+alter table public.devices add column if not exists vlan text;
+alter table public.devices add column if not exists ip_assignment text;
+alter table public.devices add column if not exists dns_name text;
+alter table public.devices add column if not exists firmware_version text;
+alter table public.devices add column if not exists app_version text;
+alter table public.devices add column if not exists switch_asset_id uuid;
+alter table public.devices add column if not exists connected_switch text;
+alter table public.devices add column if not exists switch_port text;
+alter table public.devices add column if not exists connection_type text;
+alter table public.devices add column if not exists poe_required text;
+alter table public.devices add column if not exists poe_class text;
+alter table public.devices add column if not exists power_source text;
+alter table public.devices add column if not exists rack_location text;
+alter table public.devices add column if not exists monitoring_portal text;
+alter table public.devices add column if not exists management_url text;
+alter table public.devices add column if not exists warranty_info text;
+alter table public.devices add column if not exists support_expiration date;
+alter table public.devices add column if not exists notes text;
+alter table public.devices add column if not exists archived boolean not null default false;
+alter table public.devices add column if not exists make text;
+alter table public.devices add column if not exists product_family text;
+alter table public.devices add column if not exists asset_tag text;
+alter table public.devices add column if not exists identity_confirmed_at timestamptz;
+alter table public.devices add column if not exists identity_confirmed_by text;
+alter table public.devices add column if not exists field_sources jsonb;
+alter table public.devices add column if not exists manual_review boolean not null default false;
+alter table public.devices add column if not exists last_verified_at timestamptz;
+alter table public.devices add column if not exists ai_identification_id uuid;
+alter table public.devices add column if not exists merged_into uuid;
+alter table public.devices add column if not exists distinct_from jsonb;
+alter table public.devices add column if not exists exported_at timestamptz;
+alter table public.devices add column if not exists export_code text;
+alter table public.devices add column if not exists export_sig text;
+alter table public.switch_ports add column if not exists switch_asset_id uuid;
+alter table public.switch_ports add column if not exists port text;
+alter table public.switch_ports add column if not exists description text;
+alter table public.switch_ports add column if not exists mode text;
+alter table public.switch_ports add column if not exists vlan text;
+alter table public.switch_ports add column if not exists tagged_vlans text;
+alter table public.switch_ports add column if not exists untagged_vlan text;
+alter table public.switch_ports add column if not exists poe_status text;
+alter table public.switch_ports add column if not exists poe_class text;
+alter table public.switch_ports add column if not exists link_speed text;
+alter table public.switch_ports add column if not exists device_id uuid;
+alter table public.switch_ports add column if not exists validation_status text;
+alter table public.switch_ports add column if not exists notes text;
+alter table public.network_links add column if not exists kind text;
+alter table public.network_links add column if not exists from_type text;
+alter table public.network_links add column if not exists from_id text;
+alter table public.network_links add column if not exists to_type text;
+alter table public.network_links add column if not exists to_id text;
+alter table public.network_links add column if not exists from_port text;
+alter table public.network_links add column if not exists to_port text;
+alter table public.network_links add column if not exists dep_type text;
+alter table public.network_links add column if not exists description text;
+alter table public.network_links add column if not exists status text;
+alter table public.network_links add column if not exists notes text;
+alter table public.backlog_items add column if not exists code text;
+alter table public.backlog_items add column if not exists building_id uuid;
+alter table public.backlog_items add column if not exists floor_id uuid;
+alter table public.backlog_items add column if not exists room_id uuid;
+alter table public.backlog_items add column if not exists device_id uuid;
+alter table public.backlog_items add column if not exists category text;
+alter table public.backlog_items add column if not exists title text;
+alter table public.backlog_items add column if not exists problem_statement text;
+alter table public.backlog_items add column if not exists observed_evidence text;
+alter table public.backlog_items add column if not exists suspected_cause text;
+alter table public.backlog_items add column if not exists root_cause text;
+alter table public.backlog_items add column if not exists root_cause_confidence text;
+alter table public.backlog_items add column if not exists root_cause_basis text;
+alter table public.backlog_items add column if not exists recommendation text;
+alter table public.backlog_items add column if not exists strategy text;
+alter table public.backlog_items add column if not exists expected_outcome text;
+alter table public.backlog_items add column if not exists operational_risk text;
+alter table public.backlog_items add column if not exists meeting_impact text;
+alter table public.backlog_items add column if not exists frequency text;
+alter table public.backlog_items add column if not exists user_impact text;
+alter table public.backlog_items add column if not exists business_impact text;
+alter table public.backlog_items add column if not exists user_friction text;
+alter table public.backlog_items add column if not exists risk_level text;
+alter table public.backlog_items add column if not exists effort text;
+alter table public.backlog_items add column if not exists estimated_cost numeric;
+alter table public.backlog_items add column if not exists safety_concern boolean not null default false;
+alter table public.backlog_items add column if not exists exec_visibility boolean not null default false;
+alter table public.backlog_items add column if not exists dependencies text;
+alter table public.backlog_items add column if not exists owner text;
+alter table public.backlog_items add column if not exists requested_by text;
+alter table public.backlog_items add column if not exists priority text;
+alter table public.backlog_items add column if not exists priority_rationale text;
+alter table public.backlog_items add column if not exists status text;
+alter table public.backlog_items add column if not exists status_changed_at timestamptz;
+alter table public.backlog_items add column if not exists target_date date;
+alter table public.backlog_items add column if not exists completed_at timestamptz;
+alter table public.backlog_items add column if not exists systemic boolean not null default false;
+alter table public.findings add column if not exists code text;
+alter table public.findings add column if not exists building_id uuid;
+alter table public.findings add column if not exists floor_id uuid;
+alter table public.findings add column if not exists room_id uuid;
+alter table public.findings add column if not exists device_id uuid;
+alter table public.findings add column if not exists audit_id uuid;
+alter table public.findings add column if not exists test_id uuid;
+alter table public.findings add column if not exists category text;
+alter table public.findings add column if not exists title text;
+alter table public.findings add column if not exists observation text;
+alter table public.findings add column if not exists classification text;
+alter table public.findings add column if not exists interpretation text;
+alter table public.findings add column if not exists hypothesis text;
+alter table public.findings add column if not exists recommended_action text;
+alter table public.findings add column if not exists priority_hint text;
+alter table public.findings add column if not exists status text;
+alter table public.findings add column if not exists backlog_item_id uuid;
+alter table public.findings add column if not exists source text;
+alter table public.findings add column if not exists source_key text;
+alter table public.it_requests add column if not exists code text;
+alter table public.it_requests add column if not exists topic text;
+alter table public.it_requests add column if not exists description text;
+alter table public.it_requests add column if not exists requested_from text;
+alter table public.it_requests add column if not exists vendor_name text;
+alter table public.it_requests add column if not exists request_type text;
+alter table public.it_requests add column if not exists building_id uuid;
+alter table public.it_requests add column if not exists floor_id uuid;
+alter table public.it_requests add column if not exists room_id uuid;
+alter table public.it_requests add column if not exists device_id uuid;
+alter table public.it_requests add column if not exists reason text;
+alter table public.it_requests add column if not exists needed_for text;
+alter table public.it_requests add column if not exists priority text;
+alter table public.it_requests add column if not exists date_requested date;
+alter table public.it_requests add column if not exists target_date date;
+alter table public.it_requests add column if not exists status text;
+alter table public.it_requests add column if not exists response text;
+alter table public.it_requests add column if not exists response_date date;
+alter table public.it_requests add column if not exists documentation text;
+alter table public.it_requests add column if not exists source_key text;
+alter table public.backlog_it_links add column if not exists backlog_item_id uuid;
+alter table public.backlog_it_links add column if not exists it_request_id uuid;
+alter table public.spare_items add column if not exists code text;
+alter table public.spare_items add column if not exists name text;
+alter table public.spare_items add column if not exists manufacturer text;
+alter table public.spare_items add column if not exists model text;
+alter table public.spare_items add column if not exists part_number text;
+alter table public.spare_items add column if not exists serial_number text;
+alter table public.spare_items add column if not exists quantity integer;
+alter table public.spare_items add column if not exists min_stock integer;
+alter table public.spare_items add column if not exists storage_location text;
+alter table public.spare_items add column if not exists building_id uuid;
+alter table public.spare_items add column if not exists floor_id uuid;
+alter table public.spare_items add column if not exists compatibility text;
+alter table public.spare_items add column if not exists condition text;
+alter table public.spare_items add column if not exists warranty text;
+alter table public.spare_items add column if not exists lifecycle text;
+alter table public.spare_items add column if not exists eol_date date;
+alter table public.spare_items add column if not exists notes text;
+alter table public.spare_items add column if not exists archived boolean not null default false;
+alter table public.photos add column if not exists code text;
+alter table public.photos add column if not exists building_id uuid;
+alter table public.photos add column if not exists floor_id uuid;
+alter table public.photos add column if not exists room_id uuid;
+alter table public.photos add column if not exists audit_id uuid;
+alter table public.photos add column if not exists device_id uuid;
+alter table public.photos add column if not exists finding_id uuid;
+alter table public.photos add column if not exists test_id uuid;
+alter table public.photos add column if not exists backlog_item_id uuid;
+alter table public.photos add column if not exists it_request_id uuid;
+alter table public.photos add column if not exists spare_item_id uuid;
+alter table public.photos add column if not exists category text;
+alter table public.photos add column if not exists description text;
+alter table public.photos add column if not exists taken_at timestamptz;
+alter table public.photos add column if not exists original_filename text;
+alter table public.photos add column if not exists mime text;
+alter table public.photos add column if not exists size_bytes integer;
+alter table public.photos add column if not exists width integer;
+alter table public.photos add column if not exists height integer;
+alter table public.photos add column if not exists has_edit boolean not null default false;
+alter table public.photos add column if not exists thumb text;
+alter table public.photos add column if not exists remote_ref text;
+alter table public.photos add column if not exists remote_edit_ref text;
+alter table public.photos add column if not exists identification_id uuid;
+alter table public.photos add column if not exists phash text;
+alter table public.photos add column if not exists crop_of uuid;
+alter table public.followups add column if not exists kind text;
+alter table public.followups add column if not exists device_id uuid;
+alter table public.followups add column if not exists room_id uuid;
+alter table public.followups add column if not exists title text;
+alter table public.followups add column if not exists detail text;
+alter table public.followups add column if not exists suggested_party text;
+alter table public.followups add column if not exists status text;
+alter table public.followups add column if not exists resolved_at timestamptz;
+alter table public.followups add column if not exists it_request_id uuid;
+alter table public.followups add column if not exists dedupe_key text;
+alter table public.insight_states add column if not exists insight_key text;
+alter table public.insight_states add column if not exists state text;
+alter table public.insight_states add column if not exists note text;
+alter table public.activity_log add column if not exists at timestamptz;
+alter table public.activity_log add column if not exists actor text;
+alter table public.activity_log add column if not exists action text;
+alter table public.activity_log add column if not exists entity_type text;
+alter table public.activity_log add column if not exists entity_id text;
+alter table public.activity_log add column if not exists entity_code text;
+alter table public.activity_log add column if not exists summary text;
+alter table public.activity_log add column if not exists building_id text;
+alter table public.activity_log add column if not exists floor_id text;
+alter table public.activity_log add column if not exists room_id text;
+alter table public.activity_log add column if not exists changes jsonb;
+alter table public.activity_log add column if not exists detail boolean not null default false;
+alter table public.exports add column if not exists code text;
+alter table public.exports add column if not exists mode text;
+alter table public.exports add column if not exists window_start timestamptz;
+alter table public.exports add column if not exists window_end timestamptz;
+alter table public.exports add column if not exists baseline_export_id text;
+alter table public.exports add column if not exists baseline_at timestamptz;
+alter table public.exports add column if not exists filters jsonb;
+alter table public.exports add column if not exists counts jsonb;
+alter table public.exports add column if not exists validation jsonb;
+alter table public.exports add column if not exists summary jsonb;
+alter table public.exports add column if not exists filename text;
+alter table public.exports add column if not exists photo_mode text;
+alter table public.exports add column if not exists status text;
+alter table public.asset_taxonomy add column if not exists kind text;
+alter table public.asset_taxonomy add column if not exists name text;
+alter table public.asset_taxonomy add column if not exists group_name text;
+alter table public.asset_taxonomy add column if not exists archived boolean not null default false;
+alter table public.asset_taxonomy add column if not exists sort_order numeric;
+alter table public.asset_taxonomy add column if not exists notes text;
+alter table public.export_profiles add column if not exists name text;
+alter table public.export_profiles add column if not exists target_system text;
+alter table public.export_profiles add column if not exists format text;
+alter table public.export_profiles add column if not exists mapping jsonb;
+alter table public.export_profiles add column if not exists options jsonb;
+alter table public.export_profiles add column if not exists notes text;
+alter table public.export_profiles add column if not exists archived boolean not null default false;
+alter table public.asset_exports add column if not exists profile_id uuid;
+alter table public.asset_exports add column if not exists profile_name text;
+alter table public.asset_exports add column if not exists format text;
+alter table public.asset_exports add column if not exists scope jsonb;
+alter table public.asset_exports add column if not exists record_count integer;
+alter table public.asset_exports add column if not exists counts jsonb;
+alter table public.asset_exports add column if not exists validation jsonb;
+alter table public.asset_exports add column if not exists filename text;
+alter table public.asset_exports add column if not exists exported_by text;
+alter table public.asset_exports add column if not exists status text;
+
+-- ---------------------------------------------------------------- value constraints
+alter table public.rooms drop constraint if exists rooms_inventory_status_check;
+alter table public.rooms add constraint rooms_inventory_status_check check (inventory_status is null or inventory_status in ('', 'in_progress', 'complete'));
+alter table public.audits drop constraint if exists audits_status_check;
+alter table public.audits add constraint audits_status_check check (status is null or status in ('in_progress', 'complete', 'verified', ''));
+alter table public.audit_notes drop constraint if exists audit_notes_note_type_check;
+alter table public.audit_notes add constraint audit_notes_note_type_check check (note_type is null or note_type in ('observed_fact', 'auditor_interpretation', 'unverified_hypothesis', 'recommended_action', ''));
+alter table public.functional_tests drop constraint if exists functional_tests_result_check;
+alter table public.functional_tests add constraint functional_tests_result_check check (result is null or result in ('pass', 'fail', 'investigate', 'na', 'not_tested', ''));
+alter table public.functional_tests drop constraint if exists functional_tests_suggestion_state_check;
+alter table public.functional_tests add constraint functional_tests_suggestion_state_check check (suggestion_state is null or suggestion_state in ('none', 'pending', 'accepted', 'dismissed', ''));
+alter table public.network_checks drop constraint if exists network_checks_status_check;
+alter table public.network_checks add constraint network_checks_status_check check (status is null or status in ('verified', 'issue', 'awaiting_it', 'na', 'not_checked', ''));
+alter table public.infra_assets drop constraint if exists infra_assets_asset_type_check;
+alter table public.infra_assets add constraint infra_assets_asset_type_check check (asset_type is null or asset_type in ('switch', 'vlan', 'subnet', 'ip_range', 'dhcp_reservation', 'static_ip', 'dns_record', 'dns_server', 'ntp_server', 'firewall_rule', 'multicast', 'qos', 'monitoring', 'other', ''));
+alter table public.infra_assets drop constraint if exists infra_assets_validation_status_check;
+alter table public.infra_assets add constraint infra_assets_validation_status_check check (validation_status is null or validation_status in ('observed', 'from_docs', 'it_validated', 'awaiting_it', 'unknown', ''));
+alter table public.asset_identifications drop constraint if exists asset_identifications_status_check;
+alter table public.asset_identifications add constraint asset_identifications_status_check check (status is null or status in ('draft', 'analyzing', 'ready', 'failed', 'confirmed', 'discarded', ''));
+alter table public.devices drop constraint if exists devices_ip_status_check;
+alter table public.devices add constraint devices_ip_status_check check (ip_status is null or ip_status in ('verified_onsite', 'verified_mgmt', 'awaiting_it', 'awaiting_vendor', 'unknown', 'unavailable', 'not_applicable', ''));
+alter table public.devices drop constraint if exists devices_mac_status_check;
+alter table public.devices add constraint devices_mac_status_check check (mac_status is null or mac_status in ('verified_onsite', 'verified_mgmt', 'awaiting_it', 'awaiting_vendor', 'unknown', 'unavailable', 'not_applicable', ''));
+alter table public.devices drop constraint if exists devices_serial_status_check;
+alter table public.devices add constraint devices_serial_status_check check (serial_status is null or serial_status in ('verified_onsite', 'verified_mgmt', 'awaiting_it', 'awaiting_vendor', 'unknown', 'unavailable', 'not_applicable', ''));
+alter table public.network_links drop constraint if exists network_links_kind_check;
+alter table public.network_links add constraint network_links_kind_check check (kind is null or kind in ('uplink', 'dependency', ''));
+alter table public.backlog_items drop constraint if exists backlog_items_priority_check;
+alter table public.backlog_items add constraint backlog_items_priority_check check (priority is null or priority in ('', 'P1', 'P2', 'P3'));
+alter table public.backlog_items drop constraint if exists backlog_items_status_check;
+alter table public.backlog_items add constraint backlog_items_status_check check (status is null or status in ('New Discovery', 'Under Investigation', 'Pending PepperDash Review', 'Pending Client IT', 'Pending Client Approval', 'Approved', 'Scheduled', 'In Progress', 'Blocked', 'Completed', 'Deferred', 'Rejected', ''));
+alter table public.backlog_items drop constraint if exists backlog_items_root_cause_confidence_check;
+alter table public.backlog_items add constraint backlog_items_root_cause_confidence_check check (root_cause_confidence is null or root_cause_confidence in ('not_determined', 'hypothesis', 'probable', 'confirmed', ''));
+alter table public.findings drop constraint if exists findings_status_check;
+alter table public.findings add constraint findings_status_check check (status is null or status in ('open', 'linked', 'duplicate', 'dismissed', ''));
+alter table public.findings drop constraint if exists findings_classification_check;
+alter table public.findings add constraint findings_classification_check check (classification is null or classification in ('observed_fact', 'auditor_interpretation', 'unverified_hypothesis', ''));
+alter table public.findings drop constraint if exists findings_priority_hint_check;
+alter table public.findings add constraint findings_priority_hint_check check (priority_hint is null or priority_hint in ('', 'P1', 'P2', 'P3'));
+alter table public.it_requests drop constraint if exists it_requests_status_check;
+alter table public.it_requests add constraint it_requests_status_check check (status is null or status in ('Draft', 'Submitted', 'Acknowledged', 'In Progress', 'Awaiting Response', 'Answered', 'Closed', 'Cancelled', ''));
+alter table public.it_requests drop constraint if exists it_requests_requested_from_check;
+alter table public.it_requests add constraint it_requests_requested_from_check check (requested_from is null or requested_from in ('Client IT', 'PepperDash', 'Vendor', 'Facilities', ''));
+alter table public.spare_items drop constraint if exists spare_items_lifecycle_check;
+alter table public.spare_items add constraint spare_items_lifecycle_check check (lifecycle is null or lifecycle in ('active', 'approaching_eol', 'eol', 'unknown', ''));
+alter table public.followups drop constraint if exists followups_status_check;
+alter table public.followups add constraint followups_status_check check (status is null or status in ('open', 'resolved', 'dismissed', ''));
+alter table public.asset_taxonomy drop constraint if exists asset_taxonomy_kind_check;
+alter table public.asset_taxonomy add constraint asset_taxonomy_kind_check check (kind is null or kind in ('category', 'manufacturer', ''));
+alter table public.export_profiles drop constraint if exists export_profiles_format_check;
+alter table public.export_profiles add constraint export_profiles_format_check check (format is null or format in ('csv', 'xlsx', 'json', ''));
+alter table public.asset_exports drop constraint if exists asset_exports_format_check;
+alter table public.asset_exports add constraint asset_exports_format_check check (format is null or format in ('csv', 'xlsx', 'json', ''));
+alter table public.asset_exports drop constraint if exists asset_exports_status_check;
+alter table public.asset_exports add constraint asset_exports_status_check check (status is null or status in ('success', 'failed', ''));
 
 -- ---------------------------------------------------------------- foreign keys (added after all tables exist)
 alter table public.floors drop constraint if exists floors_building_id_fkey;
@@ -829,6 +1375,12 @@ alter table public.infra_assets drop constraint if exists infra_assets_floor_id_
 alter table public.infra_assets add constraint infra_assets_floor_id_fkey foreign key (floor_id) references public.floors(id);
 alter table public.infra_assets drop constraint if exists infra_assets_room_id_fkey;
 alter table public.infra_assets add constraint infra_assets_room_id_fkey foreign key (room_id) references public.rooms(id);
+alter table public.asset_identifications drop constraint if exists asset_identifications_building_id_fkey;
+alter table public.asset_identifications add constraint asset_identifications_building_id_fkey foreign key (building_id) references public.buildings(id);
+alter table public.asset_identifications drop constraint if exists asset_identifications_floor_id_fkey;
+alter table public.asset_identifications add constraint asset_identifications_floor_id_fkey foreign key (floor_id) references public.floors(id);
+alter table public.asset_identifications drop constraint if exists asset_identifications_room_id_fkey;
+alter table public.asset_identifications add constraint asset_identifications_room_id_fkey foreign key (room_id) references public.rooms(id);
 alter table public.devices drop constraint if exists devices_building_id_fkey;
 alter table public.devices add constraint devices_building_id_fkey foreign key (building_id) references public.buildings(id);
 alter table public.devices drop constraint if exists devices_floor_id_fkey;
@@ -925,12 +1477,19 @@ create index if not exists infra_assets_room_id_idx on public.infra_assets (room
 create index if not exists infra_assets_device_id_idx on public.infra_assets (device_id);
 create index if not exists infra_assets_sync_idx on public.infra_assets (org_id, server_updated_at, id);
 create index if not exists infra_assets_code_idx on public.infra_assets (org_id, code);
+create index if not exists asset_identifications_building_id_idx on public.asset_identifications (building_id);
+create index if not exists asset_identifications_floor_id_idx on public.asset_identifications (floor_id);
+create index if not exists asset_identifications_room_id_idx on public.asset_identifications (room_id);
+create index if not exists asset_identifications_device_id_idx on public.asset_identifications (device_id);
+create index if not exists asset_identifications_sync_idx on public.asset_identifications (org_id, server_updated_at, id);
 create index if not exists devices_building_id_idx on public.devices (building_id);
 create index if not exists devices_floor_id_idx on public.devices (floor_id);
 create index if not exists devices_room_id_idx on public.devices (room_id);
 create index if not exists devices_rack_id_idx on public.devices (rack_id);
 create index if not exists devices_audit_id_idx on public.devices (audit_id);
 create index if not exists devices_switch_asset_id_idx on public.devices (switch_asset_id);
+create index if not exists devices_ai_identification_id_idx on public.devices (ai_identification_id);
+create index if not exists devices_merged_into_idx on public.devices (merged_into);
 create index if not exists devices_sync_idx on public.devices (org_id, server_updated_at, id);
 create index if not exists devices_code_idx on public.devices (org_id, code);
 create index if not exists switch_ports_switch_asset_id_idx on public.switch_ports (switch_asset_id);
@@ -975,6 +1534,8 @@ create index if not exists photos_test_id_idx on public.photos (test_id);
 create index if not exists photos_backlog_item_id_idx on public.photos (backlog_item_id);
 create index if not exists photos_it_request_id_idx on public.photos (it_request_id);
 create index if not exists photos_spare_item_id_idx on public.photos (spare_item_id);
+create index if not exists photos_identification_id_idx on public.photos (identification_id);
+create index if not exists photos_crop_of_idx on public.photos (crop_of);
 create index if not exists photos_sync_idx on public.photos (org_id, server_updated_at, id);
 create index if not exists photos_code_idx on public.photos (org_id, code);
 create index if not exists followups_device_id_idx on public.followups (device_id);
@@ -985,6 +1546,10 @@ create index if not exists insight_states_sync_idx on public.insight_states (org
 create index if not exists activity_log_sync_idx on public.activity_log (org_id, server_updated_at, id);
 create index if not exists exports_sync_idx on public.exports (org_id, server_updated_at, id);
 create index if not exists exports_code_idx on public.exports (org_id, code);
+create index if not exists asset_taxonomy_sync_idx on public.asset_taxonomy (org_id, server_updated_at, id);
+create index if not exists export_profiles_sync_idx on public.export_profiles (org_id, server_updated_at, id);
+create index if not exists asset_exports_profile_id_idx on public.asset_exports (profile_id);
+create index if not exists asset_exports_sync_idx on public.asset_exports (org_id, server_updated_at, id);
 create index if not exists devices_identity_idx on public.devices (org_id, ip_address, mac_address, serial_number);
 create index if not exists activity_log_at_idx on public.activity_log (org_id, at desc);
 create index if not exists backlog_items_status_idx on public.backlog_items (org_id, status, priority);
@@ -1107,6 +1672,15 @@ drop policy if exists infra_assets_insert on public.infra_assets;
 create policy infra_assets_insert on public.infra_assets for insert to authenticated with check (public.can_write_org(org_id));
 drop policy if exists infra_assets_update on public.infra_assets;
 create policy infra_assets_update on public.infra_assets for update to authenticated using (public.can_write_org(org_id)) with check (public.can_write_org(org_id));
+revoke all on table public.asset_identifications from anon, authenticated;
+grant select, insert, update on table public.asset_identifications to authenticated;
+alter table public.asset_identifications enable row level security;
+drop policy if exists asset_identifications_select on public.asset_identifications;
+create policy asset_identifications_select on public.asset_identifications for select to authenticated using (public.is_org_member(org_id));
+drop policy if exists asset_identifications_insert on public.asset_identifications;
+create policy asset_identifications_insert on public.asset_identifications for insert to authenticated with check (public.can_write_org(org_id));
+drop policy if exists asset_identifications_update on public.asset_identifications;
+create policy asset_identifications_update on public.asset_identifications for update to authenticated using (public.can_write_org(org_id)) with check (public.can_write_org(org_id));
 revoke all on table public.devices from anon, authenticated;
 grant select, insert, update on table public.devices to authenticated;
 alter table public.devices enable row level security;
@@ -1224,6 +1798,33 @@ drop policy if exists exports_insert on public.exports;
 create policy exports_insert on public.exports for insert to authenticated with check (public.can_write_org(org_id));
 drop policy if exists exports_update on public.exports;
 create policy exports_update on public.exports for update to authenticated using (public.can_write_org(org_id)) with check (public.can_write_org(org_id));
+revoke all on table public.asset_taxonomy from anon, authenticated;
+grant select, insert, update on table public.asset_taxonomy to authenticated;
+alter table public.asset_taxonomy enable row level security;
+drop policy if exists asset_taxonomy_select on public.asset_taxonomy;
+create policy asset_taxonomy_select on public.asset_taxonomy for select to authenticated using (public.is_org_member(org_id));
+drop policy if exists asset_taxonomy_insert on public.asset_taxonomy;
+create policy asset_taxonomy_insert on public.asset_taxonomy for insert to authenticated with check (public.can_write_org(org_id));
+drop policy if exists asset_taxonomy_update on public.asset_taxonomy;
+create policy asset_taxonomy_update on public.asset_taxonomy for update to authenticated using (public.can_write_org(org_id)) with check (public.can_write_org(org_id));
+revoke all on table public.export_profiles from anon, authenticated;
+grant select, insert, update on table public.export_profiles to authenticated;
+alter table public.export_profiles enable row level security;
+drop policy if exists export_profiles_select on public.export_profiles;
+create policy export_profiles_select on public.export_profiles for select to authenticated using (public.is_org_member(org_id));
+drop policy if exists export_profiles_insert on public.export_profiles;
+create policy export_profiles_insert on public.export_profiles for insert to authenticated with check (public.can_write_org(org_id));
+drop policy if exists export_profiles_update on public.export_profiles;
+create policy export_profiles_update on public.export_profiles for update to authenticated using (public.can_write_org(org_id)) with check (public.can_write_org(org_id));
+revoke all on table public.asset_exports from anon, authenticated;
+grant select, insert, update on table public.asset_exports to authenticated;
+alter table public.asset_exports enable row level security;
+drop policy if exists asset_exports_select on public.asset_exports;
+create policy asset_exports_select on public.asset_exports for select to authenticated using (public.is_org_member(org_id));
+drop policy if exists asset_exports_insert on public.asset_exports;
+create policy asset_exports_insert on public.asset_exports for insert to authenticated with check (public.can_write_org(org_id));
+drop policy if exists asset_exports_update on public.asset_exports;
+create policy asset_exports_update on public.asset_exports for update to authenticated using (public.can_write_org(org_id)) with check (public.can_write_org(org_id));
 -- No DELETE privilege and no DELETE policy exist on any data table: clients cannot hard-delete. Deletion is a soft delete (deleted_at).
 
 -- ---------------------------------------------------------------- triggers
@@ -1331,6 +1932,14 @@ drop trigger if exists c_stamp on public.infra_assets;
 create trigger c_stamp before insert or update on public.infra_assets for each row execute function public.stamp_server_updated_at();
 drop trigger if exists z_audit on public.infra_assets;
 create trigger z_audit after insert or update on public.infra_assets for each row execute function public.record_audit_trail();
+drop trigger if exists a_keep_newer on public.asset_identifications;
+create trigger a_keep_newer before update on public.asset_identifications for each row execute function public.keep_newer_version();
+drop trigger if exists b_lock_org on public.asset_identifications;
+create trigger b_lock_org before update on public.asset_identifications for each row execute function public.lock_org_id();
+drop trigger if exists c_stamp on public.asset_identifications;
+create trigger c_stamp before insert or update on public.asset_identifications for each row execute function public.stamp_server_updated_at();
+drop trigger if exists z_audit on public.asset_identifications;
+create trigger z_audit after insert or update on public.asset_identifications for each row execute function public.record_audit_trail();
 drop trigger if exists a_keep_newer on public.devices;
 create trigger a_keep_newer before update on public.devices for each row execute function public.keep_newer_version();
 drop trigger if exists b_lock_org on public.devices;
@@ -1435,6 +2044,30 @@ drop trigger if exists c_stamp on public.exports;
 create trigger c_stamp before insert or update on public.exports for each row execute function public.stamp_server_updated_at();
 drop trigger if exists z_audit on public.exports;
 create trigger z_audit after insert or update on public.exports for each row execute function public.record_audit_trail();
+drop trigger if exists a_keep_newer on public.asset_taxonomy;
+create trigger a_keep_newer before update on public.asset_taxonomy for each row execute function public.keep_newer_version();
+drop trigger if exists b_lock_org on public.asset_taxonomy;
+create trigger b_lock_org before update on public.asset_taxonomy for each row execute function public.lock_org_id();
+drop trigger if exists c_stamp on public.asset_taxonomy;
+create trigger c_stamp before insert or update on public.asset_taxonomy for each row execute function public.stamp_server_updated_at();
+drop trigger if exists z_audit on public.asset_taxonomy;
+create trigger z_audit after insert or update on public.asset_taxonomy for each row execute function public.record_audit_trail();
+drop trigger if exists a_keep_newer on public.export_profiles;
+create trigger a_keep_newer before update on public.export_profiles for each row execute function public.keep_newer_version();
+drop trigger if exists b_lock_org on public.export_profiles;
+create trigger b_lock_org before update on public.export_profiles for each row execute function public.lock_org_id();
+drop trigger if exists c_stamp on public.export_profiles;
+create trigger c_stamp before insert or update on public.export_profiles for each row execute function public.stamp_server_updated_at();
+drop trigger if exists z_audit on public.export_profiles;
+create trigger z_audit after insert or update on public.export_profiles for each row execute function public.record_audit_trail();
+drop trigger if exists a_keep_newer on public.asset_exports;
+create trigger a_keep_newer before update on public.asset_exports for each row execute function public.keep_newer_version();
+drop trigger if exists b_lock_org on public.asset_exports;
+create trigger b_lock_org before update on public.asset_exports for each row execute function public.lock_org_id();
+drop trigger if exists c_stamp on public.asset_exports;
+create trigger c_stamp before insert or update on public.asset_exports for each row execute function public.stamp_server_updated_at();
+drop trigger if exists z_audit on public.asset_exports;
+create trigger z_audit after insert or update on public.asset_exports for each row execute function public.record_audit_trail();
 
 -- ---------------------------------------------------------------- photographs: private bucket, organization-scoped paths
 -- Object path convention: <org_id>/<photo_id>/original   and   <org_id>/<photo_id>/edited

@@ -172,15 +172,22 @@ Per auditor device (details and the reasons are in [MOBILE_GUIDE.md](MOBILE_GUID
 
 1. Change the source, run the test suite (`tests/tests.html` through `tools\serve.ps1`; see
    [TEST_REPORT.md](TEST_REPORT.md)) and `tools\validate-outputs.ps1`.
-2. `tools\build.ps1` (with the same `-SyncOrigin` as before, if any) and upload `dist\site\`.
-3. Installed copies look for a new version whenever they are opened or returned to with a connection (an iPhone
+2. **If `supabase/schema.sql` changed and a cloud workspace is in use: run it in the Supabase SQL editor first.** It is
+   safe to run again (it adds missing tables and columns with `if not exists`, re-applies the value lists and the
+   policies, and changes no row). A client whose database lacks a column it sends stops synchronising and says so
+   (*Settings → Cloud sync*); its changes stay queued on the device until the SQL has run. The 19 November 2026
+   version (asset inventory) needs this.
+3. `tools\build.ps1` (with the same `-SyncOrigin` as before, if any) and upload `dist\site\` — or push to `main`, which
+   deploys through the GitHub workflow.
+4. Installed copies look for a new version whenever they are opened or returned to with a connection (an iPhone
    home-screen app is usually resumed, not restarted). The new version installs in the background and the page switches
    to it by itself as soon as no editor or dialog is open, nothing is being typed and every change is saved; until then
    a banner offers *Load now*. *Settings → About* shows the build that is running. Data on the device is not touched by
    an update.
 
-The on-device database has a version number (`DB_VERSION` in `app/js/store.js`). Adding a table means raising it;
-that has not been needed so far, and there is no migration code beyond creating missing object stores.
+The on-device database has a version number (`DB_VERSION` in `app/js/store.js`). Adding a table means raising it.
+Version 2 (19 November 2026) added the four asset inventory tables; the upgrade only creates missing object stores and
+leaves every record as it was.
 
 ## 6. Checks after the first deployment
 

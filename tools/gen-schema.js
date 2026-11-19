@@ -15,7 +15,9 @@
     '-- AV ENVIRONMENT INTELLIGENCE  -  PostgreSQL / Supabase schema',
     '-- GENERATED from app/js/schema.js by tools/gen-schema.js. Do not edit by hand; regenerate instead.',
     '--',
-    '-- Apply once, in the Supabase SQL editor, to a project that has been approved for this data.',
+    '-- Apply in the Supabase SQL editor, to a project that has been approved for this data. Safe to run again: on a',
+    '-- database made from an earlier version it adds the new tables and columns and refreshes constraints, policies and',
+    '-- triggers, and changes no existing row.',
     '-- Contents: tables, foreign keys, indexes, value constraints, change triggers, server-side audit trail,',
     '--           row-level security (organization membership + role), private photograph bucket and its policies.',
     '-- Model:    every row belongs to an organization (org_id). A signed-in user may read rows of organizations they',
@@ -101,7 +103,7 @@
     '     end $$;', '');
 
   out('-- ---------------------------------------------------------------- data tables');
-  const fks = [], idx = [], pol = [], trg = [];
+  const fks = [], idx = [], pol = [], trg = [], adds = [], cks = [];
   S.TABLES.forEach(function (name) {
     if (SERVER_MANAGED[name]) return;
     const t = S.T[name];
@@ -111,12 +113,16 @@
       if (c.required) line += ' not null';
       if (c.type === 'bool') line += ' not null default false';
       out(line + ',');
+      /* an earlier version's table gets the column too (never a required one: those existed from the start) */
+      adds.push('alter table public.' + name + ' add column if not exists ' + c.name + ' ' + TYPES[c.type] + (c.type === 'bool' ? ' not null default false' : '') + ';');
       if (c.ref && !c.soft) fks.push('alter table public.' + name + ' drop constraint if exists ' + name + '_' + c.name + '_fkey;',
         'alter table public.' + name + ' add constraint ' + name + '_' + c.name + '_fkey foreign key (' + c.name + ') references public.' + c.ref + '(id);');
       if (c.ref) idx.push('create index if not exists ' + name + '_' + c.name + '_idx on public.' + name + ' (' + c.name + ');');
     });
+    /* value lists are (re)applied after the tables exist, so a list that gained a value reaches an existing database */
     (CHECKS[name] || []).forEach(function (ck) {
-      out('  constraint ' + name + '_' + ck[0] + '_check check (' + ck[0] + ' is null or ' + ck[0] + ' in (' + q(ck[1]) + ')),');
+      cks.push('alter table public.' + name + ' drop constraint if exists ' + name + '_' + ck[0] + '_check;',
+        'alter table public.' + name + ' add constraint ' + name + '_' + ck[0] + '_check check (' + ck[0] + ' is null or ' + ck[0] + ' in (' + q(ck[1]) + '));');
     });
     if (name === 'backlog_items') out("  constraint backlog_items_root_cause_confirmed_check check (root_cause_confidence = 'confirmed' or coalesce(root_cause, '') = ''),");
     if (name === 'audits') out('  constraint audits_target_check check (room_id is not null or configuration_id is not null),');
@@ -143,6 +149,10 @@
       'drop trigger if exists z_audit on public.' + name + ';',
       'create trigger z_audit after insert or update on public.' + name + ' for each row execute function public.record_audit_trail();');
   });
+  out('', '-- ---------------------------------------------------------------- columns added since the first version (no-ops on a new database)');
+  adds.forEach(function (l) { out(l); });
+  out('', '-- ---------------------------------------------------------------- value constraints');
+  cks.forEach(function (l) { out(l); });
   out('', '-- ---------------------------------------------------------------- foreign keys (added after all tables exist)');
   fks.forEach(function (l) { out(l); });
   out('', '-- useful uniqueness within an organization',

@@ -383,7 +383,18 @@
     if (v == null || v === false) el.removeAttribute(k);
     else el.setAttribute(k, v === true ? '' : String(v));
   }
+  /* Every node the renderer creates is marked. Browser extensions (Grammarly, password managers, translators) insert
+     nodes of their own next to fields; those carry no mark, and the renderer neither counts, moves nor removes them.
+     Without this an inserted node shifts every position after it, a patch fails, and the whole screen is rebuilt —
+     which takes the cursor out of the field being typed in. */
+  const OWN = '__evOwn';
   function create(v, svg) {
+    const n = createNode(v, svg);
+    n[OWN] = true;
+    return n;
+  }
+  function ownChildren(parent) { return Array.prototype.filter.call(parent.childNodes, function (n) { return n[OWN] === true; }); }
+  function createNode(v, svg) {
     if (v.text != null) return document.createTextNode(v.text);
     svg = svg || v.tag === 'svg';
     const el = svg ? document.createElementNS(SVG_NS, v.tag) : document.createElement(v.tag);
@@ -397,7 +408,7 @@
   function sameNode(a, b) { return a.tag === b.tag && a.key === b.key && (a.text == null) === (b.text == null); }
   function patchNode(el, a, b, svg) {
     if (a === b) return el;
-    if (!sameNode(a, b)) { const n = create(b, svg); el.parentNode.replaceChild(n, el); return n; }
+    if (!sameNode(a, b)) { const n = create(b, svg); if (el.parentNode) el.parentNode.replaceChild(n, el); return n; }
     if (b.text != null) { if (a.text !== b.text) el.nodeValue = b.text; return el; }
     svg = svg || b.tag === 'svg';
     const ap = a.props, bp = b.props;
@@ -411,10 +422,14 @@
     let keyed = false;
     for (let i = 0; i < bs.length && !keyed; i++) keyed = bs[i].key != null;
     for (let i = 0; i < as.length && !keyed; i++) keyed = as[i].key != null;
-    const nodes = Array.prototype.slice.call(parent.childNodes);
+    const nodes = ownChildren(parent);
     if (!keyed) {
       const common = Math.min(as.length, bs.length);
-      for (let i = 0; i < common; i++) patchNode(nodes[i], as[i], bs[i], svg);
+      for (let i = 0; i < common; i++) {
+        /* a node of ours that something else removed is simply made again */
+        if (nodes[i]) patchNode(nodes[i], as[i], bs[i], svg);
+        else parent.appendChild(create(bs[i], svg));
+      }
       for (let i = common; i < bs.length; i++) parent.appendChild(create(bs[i], svg));
       for (let i = as.length - 1; i >= common; i--) { if (nodes[i] && nodes[i].parentNode === parent) parent.removeChild(nodes[i]); }
       return;
@@ -434,15 +449,19 @@
       let hit = null;
       if (b.key != null) { hit = oldKeyed.get(b.key) || null; if (hit) oldKeyed.delete(b.key); }
       else if (pi < oldPlain.length) { hit = oldPlain[pi++]; }
-      if (hit && sameNode(hit.v, b)) result.push(patchNode(hit.n, hit.v, b, svg));
+      if (hit && hit.n && sameNode(hit.v, b)) result.push(patchNode(hit.n, hit.v, b, svg));
       else { if (hit) stale.push(hit.n); result.push(create(b, svg)); }
     }
     oldKeyed.forEach(function (o) { stale.push(o.n); });
     for (; pi < oldPlain.length; pi++) stale.push(oldPlain[pi].n);
     for (let i = 0; i < stale.length; i++) { if (stale[i] && stale[i].parentNode === parent) parent.removeChild(stale[i]); }
-    for (let i = 0; i < result.length; i++) {
-      const cur = parent.childNodes[i];
-      if (cur !== result[i]) parent.insertBefore(result[i], cur || null);
+    /* Put our nodes in order, moving one only when it is out of place (moving a field takes the cursor out of it).
+       Working from the end, each node is checked against the one that must follow it; nodes of others in between are
+       left where they are. */
+    for (let i = result.length - 1; i >= 0; i--) {
+      const n = result[i], next = i + 1 < result.length ? result[i + 1] : null;
+      if (n.parentNode !== parent) parent.insertBefore(n, next);
+      else if (next && !(n.compareDocumentPosition(next) & 4)) parent.insertBefore(n, next);   /* 4 = next follows n */
     }
   }
 
@@ -471,7 +490,7 @@
     }
     try {
       if (!prevTree) rootEl.appendChild(create(next, false));
-      else patchNode(rootEl.firstChild, prevTree, next, false);
+      else patchNode(ownChildren(rootEl)[0] || rootEl.firstChild, prevTree, next, false);
       prevTree = next;
     } catch (err) {
       console.error('[patch] rebuilding DOM', err);

@@ -33,7 +33,12 @@
     { file: 'activity_log.csv', table: 'activity_log', core: true, desc: 'Change history: who changed what and when, with field-level before/after values.' },
     { file: 'photo_index.csv', table: 'photos', core: true, desc: 'One row per photograph with its file path in this package and its links to room, device, audit and finding.' }
   ];
-  const SKIP_TABLES = { organizations: 1, profiles: 1, insight_states: 1, exports: 1 };
+  /* the asset inventory has its own export (pages/integration.js); its tables and bookkeeping columns are not part of this package */
+  const SKIP_TABLES = { organizations: 1, profiles: 1, insight_states: 1, exports: 1, asset_identifications: 1, asset_taxonomy: 1, export_profiles: 1, asset_exports: 1 };
+  const INVENTORY_ONLY = { rooms: { department: 0, inventory_status: 1, inventory_completed_at: 1, inventory_completed_by: 1 },
+    devices: { identity_confirmed_at: 1, identity_confirmed_by: 1, field_sources: 1, manual_review: 1, last_verified_at: 1, ai_identification_id: 1, merged_into: 1,
+      distinct_from: 1, exported_at: 1, export_code: 1, export_sig: 1 },
+    photos: { identification_id: 1, phash: 1, crop_of: 1 } };
 
   /* ------------------------------------------------------------------ column mapping */
   const REF_COLS = {
@@ -129,7 +134,7 @@
     const seen = new Set(['id']);
     if (t.colNames.indexOf('code') >= 0) { defs.push({ name: 'code', get: function (r) { return r.code; } }); seen.add('code'); }
     t.columns.forEach(function (c) {
-      if (seen.has(c.name) || (table === 'photos' && c.name === 'thumb')) return;
+      if (seen.has(c.name) || (table === 'photos' && c.name === 'thumb') || (INVENTORY_ONLY[table] && INVENTORY_ONLY[table][c.name])) return;
       seen.add(c.name);
       defs.push({ name: c.name, get: function (r) { return r[c.name]; }, ref: c.ref, soft: c.soft });
       if (c.ref && REF_COLS[c.ref]) REF_COLS[c.ref].forEach(function (rc) {

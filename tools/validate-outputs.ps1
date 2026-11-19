@@ -68,51 +68,62 @@ foreach ($pdf in Get-ChildItem $Dir -Filter *.pdf) {
 
 if (-not $SkipExcel) {
   Write-Host "== XLSX (Microsoft Excel via COM)"
+  # One Excel instance per workbook: a file checked earlier can leave an instance busy, and the next one's calls are
+  # then rejected (RPC_E_CALL_REJECTED).
+  foreach ($x in Get-ChildItem $Dir -Filter *.xlsx) {
   $xl = $null
   try {
     $xl = New-Object -ComObject Excel.Application
     $xl.Visible = $false; $xl.DisplayAlerts = $false; $xl.AskToUpdateLinks = $false
     try { $xl.AutomationSecurity = 3 } catch {}
-    foreach ($x in Get-ChildItem $Dir -Filter *.xlsx) {
       try {
         # CorruptLoad = 0 (xlNormalLoad): a file needing repair raises an error instead of being silently repaired
         # With DisplayAlerts off, Excel refuses (throws) rather than repairs a damaged workbook - verified against a deliberately corrupted file.
         $wb = $xl.Workbooks.Open($x.FullName, 0, $true)
+        # A workbook that recalculates on load keeps Excel busy for a moment; calls made meanwhile are rejected
+        # (RPC_E_CALL_REJECTED). Wait until Excel says it is ready, for at most 30 seconds.
+        for ($i = 0; $i -lt 150; $i++) { $ready = $false; try { $ready = [bool]$xl.Ready } catch {}; if ($ready) { break }; Start-Sleep -Milliseconds 200 }
         $tables = 0; $sheetNames = @()
         foreach ($ws in @($wb.Worksheets)) { $tables += [int]$ws.ListObjects.Count; $sheetNames += [string]$ws.Name }
         $caption = $xl.ActiveWindow.Caption
         if ($caption -match 'Repaired') { Bad "$($x.Name): Excel repaired the file" }
         else { Ok ("{0}: opens without repair - {1} sheets, {2} tables" -f $x.Name, $sheetNames.Count, $tables) }
         if ($x.Name -eq 'master_workbook.xlsx') {
-          $d = $wb.Worksheets.Item('Executive Dashboard')
-          $vals = @{}; $errs = 0; $formulas = 0
-          for ($r = 1; $r -le 70; $r++) {
-            $c = $d.Cells.Item($r, 2)
-            if ($c.HasFormula) { $formulas++; $v = $c.Value2; if ($v -is [int] -and $v -lt 0) { $errs++ } elseif ($v -isnot [double] -and $v -isnot [int]) { $errs++; Write-Host ("        row {0}: {1} = {2}" -f $r, $d.Cells.Item($r, 1).Text, $c.Text) } else { $vals[$d.Cells.Item($r, 1).Text] = $v } }
+          # Excel can reject calls while it is still recalculating (RPC_E_CALL_REJECTED): wait and try again, a few times.
+          for ($attempt = 1; $attempt -le 6; $attempt++) {
+            try {
+              $d = $wb.Worksheets.Item('Executive Dashboard')
+              $vals = @{}; $errs = 0; $formulas = 0
+              for ($r = 1; $r -le 70; $r++) {
+                $c = $d.Cells.Item($r, 2)
+                if ($c.HasFormula) { $formulas++; $v = $c.Value2; if ($v -is [int] -and $v -lt 0) { $errs++ } elseif ($v -isnot [double] -and $v -isnot [int]) { $errs++; Write-Host ("        row {0}: {1} = {2}" -f $r, $d.Cells.Item($r, 1).Text, $c.Text) } else { $vals[$d.Cells.Item($r, 1).Text] = $v } }
+              }
+              if ($errs) { Bad "dashboard: $errs formulas did not evaluate to a number" } else { Ok "dashboard: $formulas formulas evaluate to numbers" }
+              $rr = $wb.Worksheets.Item('Room Register').ListObjects.Item(1).ListRows.Count
+              $di = $wb.Worksheets.Item('Device Inventory').ListObjects.Item(1).ListRows.Count
+              $bl = $wb.Worksheets.Item('Improvement Backlog').ListObjects.Item(1).ListRows.Count
+              if ($vals['Spaces (all)'] -eq $rr) { Ok "dashboard 'Spaces (all)' = $rr = rows in Room Register" } else { Bad "dashboard Spaces $($vals['Spaces (all)']) <> Room Register rows $rr" }
+              if ($vals['Devices inventoried'] -eq $di) { Ok "dashboard 'Devices inventoried' = $di = rows in Device Inventory" } else { Bad "dashboard Devices $($vals['Devices inventoried']) <> Device Inventory rows $di" }
+              Ok ("dashboard sample: buildings={0}, floors={1}, rooms completed={2}, incomplete identification={3}, open backlog={4}, P1 open={5}, IT outstanding={6}, audit completion={7:P0}" -f $vals['Buildings'], $vals['Floors'], $vals['Rooms completed'], $vals['Devices with incomplete identification'], $vals['Open backlog items'], $vals['P1 open'], $vals['Outstanding Client IT dependencies'], $vals['Audit completion'])
+              $ws = $wb.Worksheets.Item('Improvement Backlog')
+              $dv = 0; try { $dv = $ws.Range('C2').Validation.Type } catch {}
+              if ($dv -eq 3) { Ok "Improvement Backlog: Priority column has a dropdown list" } else { Bad "Improvement Backlog: no dropdown on Priority" }
+              if ($ws.Range('C2').FormatConditions.Count -ge 1) { Ok "Improvement Backlog: conditional formatting present on Priority" } else { Bad "no conditional formatting on Priority" }
+              $frozen = $true
+              foreach ($n in 'Room Register','Device Inventory','Findings') { $wb.Worksheets.Item($n).Activate(); if (-not $xl.ActiveWindow.FreezePanes) { $frozen = $false } }
+              if ($frozen) { Ok "header rows are frozen on the data tabs" } else { Bad "header rows not frozen" }
+              Ok ("tabs: " + ($sheetNames -join ' | '))
+              break
+            } catch { if ($_.Exception.HResult -eq -2147418111 -and $attempt -lt 6) { Start-Sleep -Seconds 2 } else { throw } }
           }
-          if ($errs) { Bad "dashboard: $errs formulas did not evaluate to a number" } else { Ok "dashboard: $formulas formulas evaluate to numbers" }
-          $rr = $wb.Worksheets.Item('Room Register').ListObjects.Item(1).ListRows.Count
-          $di = $wb.Worksheets.Item('Device Inventory').ListObjects.Item(1).ListRows.Count
-          $bl = $wb.Worksheets.Item('Improvement Backlog').ListObjects.Item(1).ListRows.Count
-          if ($vals['Spaces (all)'] -eq $rr) { Ok "dashboard 'Spaces (all)' = $rr = rows in Room Register" } else { Bad "dashboard Spaces $($vals['Spaces (all)']) <> Room Register rows $rr" }
-          if ($vals['Devices inventoried'] -eq $di) { Ok "dashboard 'Devices inventoried' = $di = rows in Device Inventory" } else { Bad "dashboard Devices $($vals['Devices inventoried']) <> Device Inventory rows $di" }
-          Ok ("dashboard sample: buildings={0}, floors={1}, rooms completed={2}, incomplete identification={3}, open backlog={4}, P1 open={5}, IT outstanding={6}, audit completion={7:P0}" -f $vals['Buildings'], $vals['Floors'], $vals['Rooms completed'], $vals['Devices with incomplete identification'], $vals['Open backlog items'], $vals['P1 open'], $vals['Outstanding Client IT dependencies'], $vals['Audit completion'])
-          $ws = $wb.Worksheets.Item('Improvement Backlog')
-          $dv = 0; try { $dv = $ws.Range('C2').Validation.Type } catch {}
-          if ($dv -eq 3) { Ok "Improvement Backlog: Priority column has a dropdown list" } else { Bad "Improvement Backlog: no dropdown on Priority" }
-          if ($ws.Range('C2').FormatConditions.Count -ge 1) { Ok "Improvement Backlog: conditional formatting present on Priority" } else { Bad "no conditional formatting on Priority" }
-          $frozen = $true
-          foreach ($n in 'Room Register','Device Inventory','Findings') { $wb.Worksheets.Item($n).Activate(); if (-not $xl.ActiveWindow.FreezePanes) { $frozen = $false } }
-          if ($frozen) { Ok "header rows are frozen on the data tabs" } else { Bad "header rows not frozen" }
-          Ok ("tabs: " + ($sheetNames -join ' | '))
         }
         $wb.Close($false)
       } catch { Bad ("{0}: {1}" -f $x.Name, $_.Exception.Message) }
-    }
   } catch { Bad ("Excel automation unavailable: " + $_.Exception.Message) }
   finally {
     if ($xl) { try { $xl.Quit() } catch {}; [void][Runtime.InteropServices.Marshal]::ReleaseComObject($xl) }
     [GC]::Collect(); [GC]::WaitForPendingFinalizers()
+  }
   }
 }
 Write-Host ""

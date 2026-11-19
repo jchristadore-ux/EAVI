@@ -57,6 +57,57 @@
       function (e) { st.busy = ''; EV.reportError(e); EV.redraw(); });
   }
 
+  /* ------------------------------------------------------------------ inventory: navigation, AI identification, lists */
+  const tx = { kind: 'category', name: '', group: 'Other' };
+  function inventoryCard() {
+    const av = EV.ai.availability(), s = store.kvGet('ai_status');
+    return ui.card({ key: 'inv', title: 'Inventory and AI identification' },
+      ui.field('Show the Legacy Command Center in the navigation', ui.toggle(EV.showLegacy(), { id: 'set-legacy', onchange: function (on) { store.kvSet('show_legacy', on); } }),
+        { div: true, cls: 'field-toggle', hint: 'The audit command center (room audits, findings, backlog, coordination, spares, reports, daily export) keeps all its data and routes. Off: one “Legacy Command Center” link opens it.' }),
+      h('div.kv-list', null,
+        ui.kv('AI identification', av.ok ? 'Available' : 'Unavailable'),
+        s && s.checked_at ? ui.kv('Last checked', U.fmtDateTime(s.checked_at)) : null,
+        s && s.provider ? ui.kv('Provider and model', s.provider + (s.model ? ' · ' + s.model : '')) : null,
+        s && !s.error ? ui.kv('Authorized on the server', s.enabled ? 'Yes' : 'No') : null),
+      av.ok ? null : ui.note('info', av.message),
+      h('p.muted', null, 'AI identification runs in the cloud workspace: the provider key is a server secret, never in the browser. It answers only after the workspace operator has authorized it (docs/AI_IDENTIFICATION.md). Only the photographs of the device being identified, and the category list, are sent — never room, building, user or network details — and only when “Identify with AI” is tapped.'),
+      h('div.btn-row.wrap', null,
+        EV.sync.config().mode === 'supabase' ? ui.btn(EV.ai.checking ? 'Checking…' : 'Check AI identification', { sm: true, id: 'set-ai-check', disabled: EV.ai.checking, onclick: function () { return EV.ai.check(); } }) : null),
+      av.ok ? ui.field('Identify automatically after a photograph', ui.toggle(store.kvGet('ai_auto') === true, { onchange: function (on) { store.kvSet('ai_auto', on); } }),
+        { div: true, cls: 'field-toggle', hint: 'Off: photographs are sent only when “Identify with AI” is tapped.' }) : null);
+  }
+  function taxonomyCard() {
+    const can = EV.inv.canAdmin();
+    const rows = store.all('asset_taxonomy');
+    const hiddenBuiltIn = rows.filter(function (t) { return t.kind === 'category' && t.archived && S.DEVICE_CATEGORIES.indexOf(t.name) >= 0; });
+    const own = U.sortBy(rows.filter(function (t) { return !(t.kind === 'category' && S.DEVICE_CATEGORIES.indexOf(t.name) >= 0); }), function (t) { return t.kind + t.name; });
+    const hide = function (name) {
+      const ex = rows.find(function (t) { return t.kind === 'category' && t.name === name; });
+      if (ex) store.update('asset_taxonomy', ex.id, { archived: true }); else store.create('asset_taxonomy', { kind: 'category', name: name, group_name: '', archived: true, sort_order: null, notes: 'Built-in category hidden' });
+    };
+    return ui.card({ key: 'tax', title: 'Device categories and manufacturers' },
+      h('p.muted', null, 'One shared list keeps the inventory consistent: categories are chosen from it, never typed freely. ' + (can ? 'Add your own, or hide a built-in category that is not used. A hidden category stays on the assets that have it.' : 'Only the workspace administrator can change the lists.')),
+      can ? h('div.form-grid', null,
+        ui.field('Add', ui.seg(tx.kind, [['category', 'Category'], ['manufacturer', 'Manufacturer']], { onchange: function (v) { tx.kind = v; } }), { div: true }),
+        ui.field('Name', ui.input(tx.name, { id: 'tax-name', oninput: function (v) { tx.name = v; } }), { half: true }),
+        tx.kind === 'category' ? ui.field('Group', ui.select(tx.group, S.CATEGORY_GROUPS.map(function (g) { return g[0]; }), { empty: false, onchange: function (v) { tx.group = v; } }), { half: true }) : null,
+        h('div.btn-row', null, ui.btn('Add', { sm: true, kind: 'primary', id: 'tax-add', disabled: !tx.name.trim(), onclick: function () {
+          const name = tx.name.trim();
+          const list = tx.kind === 'category' ? EV.inv.categories() : EV.inv.manufacturers();
+          if (list.some(function (x) { return x.toLowerCase() === name.toLowerCase(); })) { EV.toast('“' + name + '” is already in the list.', 'warn'); return; }
+          const ex = rows.find(function (t) { return t.kind === tx.kind && t.name.toLowerCase() === name.toLowerCase(); });
+          if (ex) store.update('asset_taxonomy', ex.id, { archived: false, group_name: tx.kind === 'category' ? tx.group : '' });
+          else store.create('asset_taxonomy', { kind: tx.kind, name: name, group_name: tx.kind === 'category' ? tx.group : '', archived: false, sort_order: null, notes: '' });
+          tx.name = ''; EV.toast('Added', 'ok');
+        } }))) : null,
+      own.length ? h('div.list', null, own.map(function (t) {
+        return h('div.row', { key: t.id }, h('span.row-main', null, h('span.row-title', null, t.name, t.archived ? ui.chip('Hidden', 'muted') : null), h('span.row-sub', null, (t.kind === 'category' ? 'Category · ' + (t.group_name || 'Other') : 'Manufacturer'))),
+          can ? h('span.row-right', null, ui.btn(t.archived ? 'Show' : 'Hide', { sm: true, kind: 'ghost', onclick: function () { store.update('asset_taxonomy', t.id, { archived: !t.archived }); } })) : null);
+      })) : null,
+      can ? ui.field('Hide a built-in category', ui.select('', EV.inv.categories().filter(function (c) { return S.DEVICE_CATEGORIES.indexOf(c) >= 0 && c !== 'Other'; }), { placeholder: 'Choose a category to hide…', onchange: function (v) { if (v) hide(v); } }), { key: 'hide' }) : null,
+      hiddenBuiltIn.length ? h('div.chips', null, hiddenBuiltIn.map(function (t) { return h('button', { type: 'button', key: t.id, 'class': 'pill', title: 'Show again', onclick: function () { if (can) store.update('asset_taxonomy', t.id, { archived: false }); } }, t.name + ' · hidden'); })) : null);
+  }
+
   EV.pages.settings = function () {
     const prof = EV.auth.profile();
     const lock = store.kvGet('lock');
@@ -84,6 +135,9 @@
                 if (st.code.length >= 2) store.kvSet('org_code', st.code);
               }, onchange: function () { st.code = null; } }),
                 { half: true, hint: 'Used for new record IDs, e.g. ' + store.orgCode() + '-BL-001. Changing the prefix does not rename existing IDs.' }))),
+
+          inventoryCard(),
+          taxonomyCard(),
 
           ui.card({ key: 'sec', title: 'Security' },
             !EV.auth.canLock() ? ui.note('warn', 'A passcode lock needs a secure (HTTPS) connection. It is unavailable on this address.') : [

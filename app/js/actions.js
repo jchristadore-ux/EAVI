@@ -296,8 +296,8 @@
    *   - optional references elsewhere are cleared;
    *   - a photograph left with no link at all goes too; otherwise it stays as evidence where it still belongs. */
   const OWNED = { audits: ['room_id', 'configuration_id'], followups: ['device_id'] };
-  const NOT_SCANNED = { activity_log: 1, exports: 1, organizations: 1, profiles: 1, insight_states: 1 };
-  const PHOTO_LINKS = ['room_id', 'audit_id', 'device_id', 'finding_id', 'test_id', 'backlog_item_id', 'it_request_id', 'spare_item_id'];
+  const NOT_SCANNED = { activity_log: 1, exports: 1, organizations: 1, profiles: 1, insight_states: 1, asset_exports: 1, export_profiles: 1, asset_taxonomy: 1 };
+  const PHOTO_LINKS = ['room_id', 'audit_id', 'device_id', 'finding_id', 'test_id', 'backlog_item_id', 'it_request_id', 'spare_item_id', 'identification_id'];
   /* seed: [{ table, id }] → { remove: [{ table, id, rec }] (seed first), clear: [{ table, id, patch }] }
      requiredOnly: follow only references the row cannot exist without (used for an ordinary recorded delete). */
   A.removalPlan = function (seed, requiredOnly) {

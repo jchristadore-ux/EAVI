@@ -3,7 +3,7 @@
  * Strategy: every application file is pre-cached under a versioned cache name and served cache-first, so the app
  * opens and works with no connection. Only same-origin GET requests are handled; requests to any other origin
  * (the optional sync endpoint) are never intercepted or cached. Audit data is not stored here — it lives in IndexedDB. */
-const VERSION = '0a821a873aa0';
+const VERSION = '288156b7c235';
 /* The cache belongs to this copy of the application: its name carries the folder the worker is served from, so two
    copies on one origin (a staging folder next to a production one, for example) never share or delete each other's. */
 const HOME = new URL('./', self.location.href).pathname;
@@ -24,7 +24,10 @@ const FILES = [
   './js/core.js',
   './js/exporter.js',
   './js/handoff.js',
+  './js/identify.js',
+  './js/inventory.js',
   './js/main.js',
+  './js/pages/assets.js',
   './js/pages/audits.js',
   './js/pages/backlog.js',
   './js/pages/command.js',
@@ -33,7 +36,10 @@ const FILES = [
   './js/pages/environment.js',
   './js/pages/export.js',
   './js/pages/infrastructure.js',
+  './js/pages/integration.js',
+  './js/pages/inventory.js',
   './js/pages/reports.js',
+  './js/pages/rooms.js',
   './js/pages/settings.js',
   './js/pages/spares.js',
   './js/pdf.js',

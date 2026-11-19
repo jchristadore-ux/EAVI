@@ -586,7 +586,7 @@
             h('div.list', null,
               rooms.length ? rooms.map(function (r) {
                 const rs = R.roomState(r.id);
-                return ui.row({ key: r.id, title: R.roomLabel(r), sub: r.room_type + (r.capacity ? ' · ' + r.capacity + ' seats' : ''), right: ui.auditChip(rs.state),
+                return ui.row({ key: r.id, title: R.roomLabel(r), sub: o.rowSub ? o.rowSub(r) : [r.room_type, r.capacity ? r.capacity + ' seats' : ''].filter(Boolean).join(' · '), right: o.right ? o.right(r) : ui.auditChip(rs.state),
                   onclick: function () { done = true; store.kvSet('last_floor', st.floor); ui.closeSheet(sheet); resolve({ room: r }); } });
               }) : ui.empty({ icon: 'grid', title: 'No rooms on this floor yet' }),
               configs.map(function (c) {

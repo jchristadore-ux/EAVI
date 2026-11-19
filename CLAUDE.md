@@ -5,8 +5,11 @@ any further work. Open the session in this folder (the one that holds `app/`, `t
 
 ## What this is
 
-A mobile-first, offline-first web application for auditing conference-room AV environments (buildings, floors,
-rooms, devices, functional tests, findings, backlog, reports, daily export). Plain ES2017, classic scripts sharing
+A mobile-first, offline-first **AV asset inventory** (since 19 November 2026): photograph each AV device room by
+room, identify it (optionally with server-side AI), capture serial / MAC / IP, and export mapped asset records for the
+monitoring portal. The earlier audit application (room audits, functional tests, findings, backlog, reports, daily
+export) is kept whole as the **Legacy Command Center** (`/legacy` and all its old routes). `docs/INVENTORY.md` is the
+reference for the inventory. Plain ES2017, classic scripts sharing
 `window.EV`, **no dependencies and no build step for development**. Data lives in IndexedDB on the device.
 `README.md` is the overview; `docs/ARCHITECTURE.md` is the engineering reference.
 
@@ -63,7 +66,7 @@ powershell -ExecutionPolicy Bypass -File tools\validate-outputs.ps1   # check th
 ## State at handoff
 
 - Version 1.0.0. The automated suite passed in full on the last run of this session; the count and the list are
-  in `docs/TEST_REPORT.md` (54 tests at handoff).
+  in `docs/TEST_REPORT.md` (54 tests at the 12 November handoff; 73 on 19 November, see below).
 - **Demo data is out of production.** `app/` has no seed; the set-up screen, Command Center and Settings offer no
   demo environment when `EV.seed` is absent. Demo-labelling code (`is_demo`, `A.removeDemo`) remains so that a
   device that once loaded the demo can still remove it.
@@ -90,6 +93,22 @@ powershell -ExecutionPolicy Bypass -File tools\validate-outputs.ps1   # check th
   The deploy workflow builds with this origin in `connect-src` (`.github/workflows/deploy.yml`). The client's
   approval of this cloud storage is still not recorded.
 
+## Asset inventory (19 November 2026)
+
+- Built on the existing tables: an asset is a `devices` row (its code is the asset ID). New tables
+  `asset_identifications` (captures + the original AI answer), `asset_taxonomy`, `export_profiles`, `asset_exports`;
+  new columns on rooms, devices and photos (list in `docs/INVENTORY.md` section 6). IndexedDB version is now 2.
+- **Deploy order matters:** run the regenerated `supabase/schema.sql` in the Supabase SQL editor (it is idempotent
+  and only adds) **before** the new client reaches the deployed site, or synchronisation fails on the new columns.
+  The deploy workflow publishes on every push to `main`, so do not push before the SQL has run.
+- **AI identification has never run against a real provider.** Client side: `app/js/identify.js`, tested with a
+  stand-in (`EV.ai.transport`). Server side: `supabase/functions/identify-device/index.ts`, written by a sub-agent,
+  never deployed, executed or type-checked (no Deno here). It refuses to call a provider unless the function secret
+  `AI_IDENTIFICATION_ENABLED=true` is set, which is the recorded authorization step. Default model
+  `claude-opus-5-5`; see `docs/AI_IDENTIFICATION.md`. No authorization is recorded.
+- Fixed on the way: `EV.xlsx.simple` named its tables `tbl1`..., which Excel refuses (reads as a cell reference);
+  `tools/validate-outputs.ps1` now uses one Excel instance per workbook (calls were rejected while a previous
+  workbook recalculated).
 ## Open items, in priority order
 
 1. Hosting is decided (owner, 12 November 2026): a **public** GitHub Pages site is acceptable for the application

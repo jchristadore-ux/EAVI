@@ -71,7 +71,8 @@
       audit_id: ctx.audit ? ctx.audit.id : (ctx.audit_id || null), device_id: ctx.device_id || null, finding_id: ctx.finding_id || null, test_id: ctx.test_id || null,
       backlog_item_id: ctx.backlog_item_id || null, it_request_id: ctx.it_request_id || null, spare_item_id: ctx.spare_item_id || null,
       category: ctx.category || 'Other', description: ctx.description || '', taken_at: ctx.taken_at || lm, original_filename: file.name || '', mime: mime,
-      size_bytes: data.byteLength, width: meta.width, height: meta.height, has_edit: false, thumb: meta.thumb, remote_ref: '', remote_edit_ref: '', is_demo: !!ctx.demo
+      size_bytes: data.byteLength, width: meta.width, height: meta.height, has_edit: false, thumb: meta.thumb, remote_ref: '', remote_edit_ref: '', is_demo: !!ctx.demo,
+      identification_id: ctx.identification_id || null, crop_of: ctx.crop_of || null, phash: ctx.phash || ''
     }, { silent: true });   /* its history entry is the "Photograph added" line below */
     if (!ctx.silent) store.log({ action: 'photo_added', table: 'photos', rec: rec, summary: 'Photograph added — ' + rec.category + (room ? ' · ' + (room.number || room.name) : '') });
     return rec;
@@ -181,6 +182,7 @@
   P.forDevice = function (deviceId) { return newest(store.by('photos', 'device_id', deviceId)); };
   P.forTest = function (testId) { return newest(store.by('photos', 'test_id', testId)); };
   P.forFinding = function (findingId) { return newest(store.by('photos', 'finding_id', findingId)); };
+  P.forIdentification = function (id) { return U.sortBy(store.by('photos', 'identification_id', id), function (p) { return p.created_at; }); };
 
   /* ------------------------------------------------------------------ capture controls */
   /* A <label> bound to a hidden file input: one tap opens the phone camera natively (no scripted click needed). */
