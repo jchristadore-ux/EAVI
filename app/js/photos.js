@@ -180,6 +180,20 @@
   P.forAudit = function (auditId) { return newest(store.by('photos', 'audit_id', auditId)); };
   P.forRoom = function (roomId) { return newest(store.by('photos', 'room_id', roomId)); };
   P.forDevice = function (deviceId) { return newest(store.by('photos', 'device_id', deviceId)); };
+  /* the picture a device is shown with in the room list and the registry: the one a person chose (main_photo_id), as long
+     as it is still one of the device's photographs; otherwise the first one taken */
+  P.mainFor = function (d) {
+    if (!d) return null;
+    const list = P.forDevice(d.id);
+    const chosen = d.main_photo_id ? list.find(function (p) { return p.id === d.main_photo_id; }) : null;
+    return chosen || list.slice(-1)[0] || null;
+  };
+  P.setMain = function (deviceId, photoId) {
+    const d = store.get('devices', deviceId), p = store.get('photos', photoId);
+    if (store.readOnly || !d || !p || p.device_id !== d.id) return false;
+    if (d.main_photo_id !== p.id) store.update('devices', d.id, { main_photo_id: p.id });
+    return true;
+  };
   P.forTest = function (testId) { return newest(store.by('photos', 'test_id', testId)); };
   P.forFinding = function (findingId) { return newest(store.by('photos', 'finding_id', findingId)); };
   P.forIdentification = function (id) { return U.sortBy(store.by('photos', 'identification_id', id), function (p) { return p.created_at; }); };
@@ -238,7 +252,7 @@
   P.thumb = function (p, list, o) {
     o = o || {};
     return h('button', { type: 'button', 'class': U.cx('thumb', p.id === P.justAdded && 'thumb-new'), key: p.id, title: p.description || p.category,
-      onclick: function () { P.openViewer(p.id, (list || [p]).map(function (x) { return x.id; })); } },
+      onclick: function () { if (Date.now() - (P._dragEndedAt || 0) < 400) return; P.openViewer(p.id, (list || [p]).map(function (x) { return x.id; })); } },
       p.thumb ? h('img', { src: p.thumb, alt: p.description || p.category, loading: 'lazy' }) : h('span.thumb-none', null, icon('image', 22)),
       o.caption !== false ? h('span.thumb-cap', null, p.category) : null,
       p.has_edit ? h('span.thumb-flag', { title: 'Annotated / rotated' }, icon('edit', 11)) : null,
@@ -261,6 +275,77 @@
   /* Compact strip used inside test rows, device editors and backlog items. */
   P.strip = function (photos) {
     return photos.length ? h('div.photo-strip', null, photos.map(function (p) { return P.thumb(p, photos, { caption: false }); })) : null;
+  };
+  /* A device's photographs with its room-list picture first, in a marked slot. Another photograph dragged onto the slot
+     becomes the room-list picture: with a mouse, press and drag; on a touch screen, hold it still briefly, then drag (a
+     quick swipe still scrolls the strip). A tap still opens the photograph. */
+  P.mainStrip = function (d, photos) {
+    const main = P.mainFor(d);
+    const ordered = main ? [main].concat(photos.filter(function (p) { return p.id !== main.id; })) : photos;
+    const slotId = 'main-slot-' + d.id;
+    const canDrag = !store.readOnly && ordered.length > 1;
+    const overSlot = function (x, y) {
+      const s = document.getElementById(slotId);
+      if (!s) return false;
+      const r = s.getBoundingClientRect();
+      return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+    };
+    function begin(e, p) {
+      if (!canDrag || (e.pointerType === 'mouse' && e.button !== 0)) return;
+      const st = { id: e.pointerId, x: e.clientX, y: e.clientY, touch: e.pointerType !== 'mouse', active: false, timer: null, ghost: null, src: e.currentTarget };
+      const place = function (x, y) {
+        if (st.ghost) { st.ghost.style.left = (x - 32) + 'px'; st.ghost.style.top = (y - 32) + 'px'; }
+        const s = document.getElementById(slotId);
+        if (s) s.classList.toggle('drop-hot', overSlot(x, y));
+      };
+      const start = function (x, y) {
+        st.active = true;
+        st.src.classList.add('thumb-dragging');
+        if (p.thumb) { st.ghost = document.createElement('img'); st.ghost.className = 'drag-ghost'; st.ghost.alt = ''; st.ghost.src = p.thumb; document.body.appendChild(st.ghost); }
+        place(x, y);
+      };
+      const stop = function () {
+        clearTimeout(st.timer);
+        document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up);
+        document.removeEventListener('pointercancel', stop); document.removeEventListener('touchmove', hold, { passive: false });
+        if (st.ghost) st.ghost.remove();
+        st.src.classList.remove('thumb-dragging');
+        const s = document.getElementById(slotId); if (s) s.classList.remove('drop-hot');
+      };
+      const move = function (ev) {
+        if (ev.pointerId !== st.id) return;
+        if (!st.active) {
+          if (Math.abs(ev.clientX - st.x) + Math.abs(ev.clientY - st.y) < 8) return;
+          if (st.touch) { stop(); return; }   /* moved before the hold: it is a scroll */
+          start(ev.clientX, ev.clientY);
+        }
+        place(ev.clientX, ev.clientY);
+      };
+      const up = function (ev) {
+        if (ev.pointerId !== st.id) return;
+        const was = st.active, hit = was && overSlot(ev.clientX, ev.clientY);
+        stop();
+        if (!was) return;
+        P._dragEndedAt = Date.now();
+        if (hit && P.setMain(d.id, p.id)) EV.toast('Room list picture set', 'ok');
+      };
+      const hold = function (ev) { if (st.active) ev.preventDefault(); };
+      if (st.touch) st.timer = setTimeout(function () { start(st.x, st.y); if (navigator.vibrate) { try { navigator.vibrate(15); } catch (x) { /* ignore */ } } }, 300);
+      document.addEventListener('pointermove', move); document.addEventListener('pointerup', up);
+      document.addEventListener('pointercancel', stop); document.addEventListener('touchmove', hold, { passive: false });
+    }
+    const item = function (p, isMain) {
+      return h('div', { key: p.id, 'class': U.cx('strip-item', canDrag && !isMain && 'strip-drag'), 'data-photo': p.id,
+        onpointerdown: isMain ? undefined : function (e) { begin(e, p); },
+        oncontextmenu: canDrag ? function (e) { e.preventDefault(); } : undefined,
+        ondragstart: function (e) { e.preventDefault(); } },
+        P.thumb(p, ordered, { caption: false }));
+    };
+    return h('div.stack', { style: 'gap:6px' },
+      h('div.photo-strip.main-strip', null,
+        main ? h('div', { key: 'slot', id: slotId, 'class': 'main-slot', title: 'Room list picture' }, item(main, true), h('span.main-slot-label', null, 'Room list')) : null,
+        ordered.slice(1).map(function (p) { return item(p, false); })),
+      canDrag ? h('span.field-hint', null, 'Drag a photograph onto the first one to show it in the room list. On a phone, hold it for a moment first.') : null);
   };
 
   /* ------------------------------------------------------------------ viewer (metadata, rotate, annotate) */
@@ -378,6 +463,13 @@
           h('div.btn-row.wrap', null,
             ui.btn('Rotate', { sm: true, icon: 'rotate', disabled: st.busy || !!st.err, onclick: function () { busy(P.rotate(p), 'Rotated (original kept)'); } }),
             ui.btn('Annotate', { sm: true, icon: 'edit', disabled: st.busy || !!st.err, onclick: startAnnot }),
+            (function () {
+              const dv = p.device_id && !store.readOnly ? store.get('devices', p.device_id) : null;
+              const cur = dv ? P.mainFor(dv) : null;
+              if (!dv) return null;
+              return cur && cur.id === p.id ? ui.chip('Room list picture', 'accent')
+                : ui.btn('Use as room list picture', { sm: true, kind: 'ghost', icon: 'check', id: 'photo-set-main', onclick: function () { if (P.setMain(dv.id, p.id)) EV.toast('Room list picture set', 'ok'); } });
+            })(),
             p.has_edit ? ui.btn('Revert to original', { sm: true, kind: 'ghost', icon: 'undo', disabled: st.busy, onclick: function () { busy(P.revert(p), 'Reverted to the original image'); } }) : null,
             ui.btn('Save file', { sm: true, kind: 'ghost', icon: 'download', disabled: st.busy || !!st.err, onclick: function () {
               return P.exportBytes(p, 'original', p.has_edit).then(function (b) {

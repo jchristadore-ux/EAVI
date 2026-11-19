@@ -413,7 +413,7 @@
   /* columns that describe the record itself, its place or its bookkeeping: never copied from one record to another */
   const NOT_MERGED = { code: 1, building_id: 1, floor_id: 1, room_id: 1, audit_id: 1, rack_id: 1, identity_confirmed_at: 1, identity_confirmed_by: 1, field_sources: 1,
     manual_review: 1, last_verified_at: 1, ai_identification_id: 1, merged_into: 1, distinct_from: 1, exported_at: 1, export_code: 1, export_sig: 1, archived: 1,
-    ip_status: 1, mac_status: 1, serial_status: 1, port_status: 1, custom_category: 1 };
+    ip_status: 1, mac_status: 1, serial_status: 1, port_status: 1, custom_category: 1, main_photo_id: 1 };
   const ID_RANK = { verified_onsite: 4, verified_mgmt: 4, not_applicable: 3, unavailable: 2, awaiting_it: 1, awaiting_vendor: 1, unknown: 0 };
   const same = function (a, b) { return String(a == null ? '' : a).trim().toLowerCase() === String(b == null ? '' : b).trim().toLowerCase(); };
   /* the other columns (firmware, switch port, VLAN, warranty…) that the kept record lacks and the merged one has */

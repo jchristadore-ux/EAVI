@@ -235,7 +235,7 @@
         'switch_asset_id~infra_assets connected_switch switch_port connection_type poe_required poe_class power_source rack_location monitoring_portal ' +
         'management_url warranty_info support_expiration:date notes archived:bool ' +
         'make product_family asset_tag identity_confirmed_at:ts identity_confirmed_by field_sources:json manual_review:bool last_verified_at:ts ' +
-        'ai_identification_id~asset_identifications merged_into~devices distinct_from:json exported_at:ts export_code export_sig presence listed_text port_status'
+        'ai_identification_id~asset_identifications merged_into~devices distinct_from:json exported_at:ts export_code export_sig presence listed_text port_status main_photo_id~photos'
     },
     switch_ports: {
       label: 'Switch port',

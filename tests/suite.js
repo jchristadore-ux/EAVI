@@ -2429,6 +2429,48 @@
     eq([after.switch_port, after.field_sources.switch_port, I.asset(after).states.switch_port], ['Gi1/0/12', 'manual', 'captured']);
     EV.ui.closeAll();
   });
+  test('a device\'s room-list picture can be chosen by dragging a photograph onto it, or from the photograph itself', async function () {
+    const P = EV.photos, room = invRoom('I-10d');
+    const d = I.create(room, { category: 'Display', manufacturer: 'LG', model: '55UH5F' }, {}, { confirm: true });
+    const other = I.create(room, { category: 'Camera', manufacturer: 'Sony', model: 'SRG-X400' }, {}, { confirm: true });
+    const p1 = (await P.ingest([await imageFile('front')], { room: room, device_id: d.id, category: 'Device front', taken_at: '2026-01-01T10:00:00Z' }))[0];
+    const p2 = (await P.ingest([await imageFile('rear')], { room: room, device_id: d.id, category: 'Device rear panels', taken_at: '2026-01-01T10:01:00Z' }))[0];
+    const p3 = (await P.ingest([await imageFile('label')], { room: room, device_id: d.id, category: 'Equipment labels', taken_at: '2026-01-01T10:02:00Z' }))[0];
+    const pOther = (await P.ingest([await imageFile('cam')], { room: room, device_id: other.id, category: 'Device front' }))[0];
+    const main = function () { return P.mainFor(store.get('devices', d.id)).id; };
+    eq(main(), p1.id, 'without a choice, the first photograph taken');
+    eq([P.setMain(d.id, pOther.id), main()], [false, p1.id], 'a photograph of another device cannot be chosen');
+    eq([P.setMain(d.id, p2.id), main(), store.get('devices', d.id).main_photo_id], [true, p2.id, p2.id]);
+    /* drag p3 onto the slot with the mouse */
+    EV.assets.open(d.id); await wait(100);
+    const slot = document.getElementById('main-slot-' + d.id);
+    eq(slot.querySelector('[data-photo]').getAttribute('data-photo'), p2.id, 'the chosen picture is in the slot');
+    const src = document.querySelector('.main-strip [data-photo="' + p3.id + '"]');
+    const a = src.getBoundingClientRect(), b = slot.getBoundingClientRect();
+    const ev = function (type, x, y, target) { (target || document).dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: 7, pointerType: 'mouse', button: 0, clientX: x, clientY: y })); };
+    ev('pointerdown', a.left + 10, a.top + 10, src);
+    ev('pointermove', a.left + 30, a.top + 10);
+    assert(document.querySelector('.drag-ghost'), 'a picture follows the pointer while dragging');
+    ev('pointermove', b.left + b.width / 2, b.top + b.height / 2);
+    ev('pointerup', b.left + b.width / 2, b.top + b.height / 2); await wait(80);
+    eq([main(), !!document.querySelector('.drag-ghost'), document.querySelectorAll('.viewer').length], [p3.id, false, 0], 'dropped on the slot: it is the picture; no viewer opened');
+    eq(document.getElementById('main-slot-' + d.id).querySelector('[data-photo]').getAttribute('data-photo'), p3.id);
+    /* dropped anywhere else: nothing changes */
+    const src1 = document.querySelector('.main-strip [data-photo="' + p1.id + '"]'), c = src1.getBoundingClientRect();
+    ev('pointerdown', c.left + 10, c.top + 10, src1); ev('pointermove', c.left + 10, c.top + 200); ev('pointerup', c.left + 10, c.top + 200); await wait(60);
+    eq(main(), p3.id, 'dropped outside the slot: unchanged');
+    EV.ui.closeAll();
+    /* from the photograph itself */
+    P.openViewer(p1.id, [p1.id]); await wait(120);
+    document.getElementById('photo-set-main').click(); await wait(60);
+    eq(main(), p1.id, 'the viewer button sets it');
+    EV.ui.closeAll();
+    /* the room list shows it, and falls back when it is deleted */
+    const findImg = function (n) { if (!n || typeof n !== 'object') return null; if (n.tag === 'img') return n; for (const k of (n.children || [])) { const f = findImg(k); if (f) return f; } return null; };
+    eq(findImg(EV.assetRow(store.get('devices', d.id))).props.src, p1.thumb, 'the room list row shows the chosen picture');
+    store.remove('photos', p1.id);
+    eq(main(), p2.id, 'a deleted choice falls back to the first remaining photograph');
+  });
   test('a label in a photograph already taken can be read later: values are offered, added only when chosen, and never replace a verified one', async function () {
     const room = invRoom('I-11');
     const d = I.create(room, { category: 'Room collaboration system', manufacturer: 'Neat', model: 'Bar Pro', mac_address: '00:00:5E:00:53:77', mac_status: 'verified_onsite' }, {}, { confirm: true });

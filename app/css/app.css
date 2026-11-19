@@ -377,6 +377,15 @@ input[type="date"].input { min-width: 0; }
 .thumb-flag-l { right: auto; left: 4px; }
 .photo-strip { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
 .photo-strip .thumb { width: 64px; flex: none; }
+.main-strip { align-items: flex-start; padding-top: 2px; }
+.main-strip .strip-item { flex: none; }
+.strip-drag { touch-action: pan-x pan-y; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+.strip-drag img, .main-slot img { -webkit-user-drag: none; pointer-events: none; }
+.strip-item.thumb-dragging { opacity: 0.35; }
+.main-slot { flex: none; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 3px; border-radius: 10px; border: 2px solid var(--accent); }
+.main-slot.drop-hot { background: var(--accent-soft, rgba(80, 140, 255, 0.18)); transform: scale(1.06); }
+.main-slot-label { font-size: 11px; color: var(--accent); font-weight: 600; line-height: 1; }
+.drag-ghost { position: fixed; width: 64px; height: 64px; object-fit: cover; border-radius: 8px; pointer-events: none; z-index: 9999; opacity: 0.85; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35); }
 .viewer { display: flex; flex-direction: column; gap: 12px; }
 .viewer-stage { position: relative; display: flex; align-items: center; justify-content: center; min-height: 200px; border-radius: var(--radius); background: #05070c; border: 1px solid var(--line); overflow: hidden; }
 .viewer-img { display: block; max-width: 100%; max-height: 56vh; object-fit: contain; }

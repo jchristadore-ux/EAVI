@@ -402,7 +402,7 @@
             })) }) : null,
           h('div.form-group', null,
             h('div.form-group-title', null, 'Photographs'),
-            photos.length ? P.strip(photos) : h('p.muted', null, 'No photographs.'),
+            photos.length ? P.mainStrip(d, photos) : h('p.muted', null, 'No photographs.'),
             store.readOnly ? null : h('div.btn-row.wrap', null,
               P.captureButton({ key: 'as-cam-' + d.id, sm: true, label: 'Add photograph', ctx: function () { return { room: room, device_id: d.id, category: 'Equipment labels', description: d.code }; } }),
               P.captureButton({ key: 'as-lib-' + d.id, sm: true, kind: 'ghost', label: 'Upload', library: true, ctx: function () { return { room: room, device_id: d.id, category: 'Equipment labels', description: d.code }; } })),

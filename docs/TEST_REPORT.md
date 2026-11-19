@@ -38,6 +38,12 @@ What was tested, how, with what result — and what was not. Date of this run: *
 > `tbl1`, which Excel refuses; fixed). The validator now opens each workbook in its own Excel instance. AI
 > identification was exercised only against a stand-in service: **no real AI provider was called** (§7).
 >
+> **Later run, 19 November 2026 (room list picture):** 80 tests; **80 pass**. The new test chooses a device's
+> room-list picture by a simulated mouse drag onto the slot (a drop elsewhere changes nothing, no viewer opens), by the
+> viewer button, refuses another device's photograph, and falls back to the first photograph when the chosen one is
+> deleted. The touch hold-then-drag path was **not** exercised on a real phone. The column `devices.main_photo_id` was
+> added to the live workspace before the push.
+>
 > **Later run, 19 November 2026 (device category drop-down; switch port on the asset record):** 79 tests; **79 pass**. The asset record now shows the switch port field once an IP address is entered (it was only on the capture screen), tested by typing an IP and a port. The new test opens an asset
 > record, checks the category is a grouped drop-down of the list with *Other - type a new category* last, picks a
 > listed category, then types a new one: the device takes it only on **Add**, and the list offers it afterwards.

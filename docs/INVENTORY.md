@@ -65,6 +65,7 @@ code (`AVEI-DV-0001` …) is the asset ID.
 | Switch port ID | **required once the device has an IP address**: the capture screen does not save without it, unless the port is stated as not accessible or not applicable; a device with an IP and no port is incomplete (dashboard: "Switch port ID not captured"). Same statuses as the other identifiers (`port_status`) |
 | Notes | optional (make, product family, function, hostname and asset tag were removed from the inventory screens on 19 November 2026; the columns stay in the database, and the legacy *Technical record* still edits hostname and role) |
 | Photographs | all photographs linked to the device; the originals are never changed |
+| Room list picture | `main_photo_id`: the photograph shown for the device in the room list and the registry. In the asset record the chosen one sits first, in a marked slot; drag another photograph onto it to change it (mouse: press and drag; touch: hold briefly, then drag), or open a photograph and tap **Use as room list picture**. Without a choice, or if the chosen one is deleted, the first photograph taken is shown. Not copied by a merge |
 | Source of each value | `field_sources`: AI image recognition, read from label photograph, entered manually, existing record, imported, network discovery (listed for imported data; the application never scans) |
 | Identity confirmed | who and when; cleared automatically when the category, manufacturer or model changes afterwards |
 | Date captured, last verified | automatic |

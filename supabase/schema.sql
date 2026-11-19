@@ -465,6 +465,7 @@ create table if not exists public.devices (
   presence text,
   listed_text text,
   port_status text,
+  main_photo_id uuid,
   created_at timestamptz not null,
   updated_at timestamptz not null,
   created_by text,
@@ -1062,6 +1063,7 @@ alter table public.devices add column if not exists export_sig text;
 alter table public.devices add column if not exists presence text;
 alter table public.devices add column if not exists listed_text text;
 alter table public.devices add column if not exists port_status text;
+alter table public.devices add column if not exists main_photo_id uuid;
 alter table public.switch_ports add column if not exists switch_asset_id uuid;
 alter table public.switch_ports add column if not exists port text;
 alter table public.switch_ports add column if not exists description text;
@@ -1500,6 +1502,7 @@ create index if not exists devices_audit_id_idx on public.devices (audit_id);
 create index if not exists devices_switch_asset_id_idx on public.devices (switch_asset_id);
 create index if not exists devices_ai_identification_id_idx on public.devices (ai_identification_id);
 create index if not exists devices_merged_into_idx on public.devices (merged_into);
+create index if not exists devices_main_photo_id_idx on public.devices (main_photo_id);
 create index if not exists devices_sync_idx on public.devices (org_id, server_updated_at, id);
 create index if not exists devices_code_idx on public.devices (org_id, code);
 create index if not exists switch_ports_switch_asset_id_idx on public.switch_ports (switch_asset_id);

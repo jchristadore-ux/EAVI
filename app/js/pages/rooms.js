@@ -72,7 +72,7 @@
     for (let k = 1; k <= list.length; k++) { const x = list[(i + k) % list.length]; if (x.id !== room.id && I.roomStatus(x) !== 'complete') return x; }
     return null;
   }
-  function firstPhoto(d) { return P.forDevice(d.id).slice(-1)[0] || null; }
+  function firstPhoto(d) { return P.mainFor(d); }
   function idText(d, a, f) {
     const s = a.states[f.k];
     if (s === 'verified' || s === 'captured') return h('span.mono', null, d[f.k]);
