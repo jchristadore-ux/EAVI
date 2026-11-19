@@ -101,6 +101,15 @@ when a person marks it; *Reopen* undoes it).
 - Several devices in one photograph are listed separately; each is saved on its own.
 - A value a person typed is never replaced by a later AI answer.
 
+## 3a. Reading a label later
+
+A photograph of a label taken during the walk-through can be read afterwards: in the asset record, **Read label from
+photographs** sends that device's photographs (labels first) to the AI identification service and lists each serial
+number, MAC address and IP address it read from visible text, each with **Add to device**. Nothing is added until it
+is tapped, a verified value is never replaced, and the value is recorded as coming from AI image recognition. Without
+AI identification (no provider key), **Read barcodes** reads the barcodes on the label photographs on browsers that
+support it (Android Chrome), and the person chooses whether each value is the serial or the MAC address.
+
 ## 4. Duplicates
 
 | Signal | Strength |

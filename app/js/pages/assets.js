@@ -306,7 +306,76 @@
           (e.changes || []).length ? h('span.row-sub.mono', null, e.changes.map(function (c) { return c.f + ': ' + (c.from || '—') + ' → ' + (c.to || '—'); }).join('; ')) : null));
       })) : h('p.muted', null, 'No changes recorded.'));
   }
+  /* ------------------------------------------------------------------ reading a label in photographs already taken */
+  const LABEL_FIRST = { 'Equipment labels': 0, 'Network port labels': 1, 'Device rear panels': 2 };
+  AS.labelPhotos = function (deviceId) {
+    return U.sortBy(P.forDevice(deviceId), function (p) { return (LABEL_FIRST[p.category] != null ? LABEL_FIRST[p.category] : 9) + (p.taken_at || ''); });
+  };
+  /* Sends the device's photographs (labels first) to the identification service; returns what it read, unchanged. */
+  AS.readLabel = function (deviceId) {
+    const photos = AS.labelPhotos(deviceId);
+    if (!photos.length) return Promise.reject(new Error('This device has no photographs. Add a photograph of its label first.'));
+    return EV.ai.identify(photos);
+  };
+  /* Adds one value read from a photograph to the device. A value already recorded and verified is never replaced by one
+     read from a photograph; the same value adds nothing. Returns a message saying what happened. */
+  AS.applyRead = function (deviceId, k, value, source) {
+    const d = store.get('devices', deviceId);
+    if (!d) return 'This device no longer exists.';
+    const f = I.ID_FIELDS.find(function (x) { return x.k === k; });
+    const v = k === 'mac_address' ? R.macFormat(value) : String(value || '').trim();
+    if (!v) return 'Nothing to add.';
+    const same = String(d[k] || '').trim().toLowerCase() === v.toLowerCase();
+    if (same) return (f ? f.label : k) + ' is already recorded as ' + d[k] + '.';
+    if (f && I.idState(d, f) === 'verified') return 'The recorded ' + f.label.toLowerCase() + ' (' + d[k] + ') is verified and is not replaced. Change it yourself if the label shows otherwise.';
+    const p = {}; p[k] = v;
+    I.update(d, p, source || 'ai');
+    return (f ? f.label : k) + ' added: ' + v + '.';
+  };
+  function labelReader(d, rd) {
+    if (store.readOnly) return null;
+    const av = EV.ai.availability(), photos = AS.labelPhotos(d.id);
+    const parts = [];
+    const add = function (k, v, src, key) {
+      return ui.btn('Add to device', { sm: true, kind: 'primary', key: key, onclick: function () { const msg = AS.applyRead(d.id, k, v, src); EV.toast(msg, /added/.test(msg) ? 'ok' : 'warn', 4500); } });
+    };
+    if (av.ok) parts.push(ui.btn(rd.busy ? 'Reading…' : 'Read label from photographs', { sm: true, icon: 'zap', key: 'read', id: 'asset-read-label', disabled: rd.busy || !photos.length, onclick: function () {
+      rd.busy = true; rd.err = ''; rd.res = null; EV.redraw();
+      return AS.readLabel(d.id).then(function (res) { rd.busy = false; rd.res = res; EV.redraw(); }, function (e) { rd.busy = false; rd.err = (e && e.message) || String(e); EV.redraw(); });
+    } }));
+    if (EV.identify.barcodeSupported() && photos.length) parts.push(ui.btn(rd.codesBusy ? 'Reading barcodes…' : 'Read barcodes', { sm: true, kind: 'ghost', icon: 'list', key: 'bc', disabled: rd.codesBusy, onclick: function () {
+      rd.codesBusy = true; rd.codes = null; EV.redraw();
+      const run = photos.slice(0, 6).reduce(function (pr, ph) { return pr.then(function (acc) { return EV.identify.readBarcodes(ph).then(function (v) { return acc.concat(v); }, function () { return acc; }); }); }, Promise.resolve([]));
+      return run.then(function (all) { rd.codesBusy = false; rd.codes = U.uniq(all); EV.redraw(); });
+    } }));
+    const out = [];
+    if (parts.length) out.push(h('div.btn-row.wrap', { key: 'rb' }, parts));
+    if (!av.ok && photos.length) out.push(h('p.field-hint', { key: 'na' }, 'Reading a label automatically needs AI identification, which is unavailable here: ' + av.message + (EV.identify.barcodeSupported() ? ' Barcodes on the label can still be read.' : '')));
+    if (rd.err) out.push(ui.note('danger', rd.err, { key: 'err', title: 'Label not read' }));
+    if (rd.res) {
+      const rows = [];
+      (rd.res.devices || []).forEach(function (x, i) {
+        [['serial_number', 'Serial number'], ['mac_address', 'MAC address'], ['ip_address', 'IP address']].forEach(function (p) {
+          const v = x[p[0]] && x[p[0]].value;
+          if (v) rows.push(h('div.row', { key: i + p[0] }, h('span.row-main', null, h('span.row-title.mono', null, v), h('span.row-sub', null, p[1] + ' — read from a label')), h('span.row-right', null, add(p[0], v, 'ai', 'a' + i + p[0]))));
+          else if (x[p[0]] && x[p[0]].raw_text) rows.push(h('div.row', { key: i + p[0] + 'r' }, h('span.row-main', null, h('span.row-title.mono', null, x[p[0]].raw_text), h('span.row-sub', null, p[1] + ' — text seen but not complete or not valid: not used'))));
+        });
+      });
+      out.push(rows.length ? ui.card({ key: 'res', title: 'Read from the photographs' }, h('div.list', null, rows), h('p.field-hint', null, 'Nothing is added until you tap it. A verified value is never replaced.'))
+        : ui.note('info', 'No serial number, MAC address or IP address could be read in these photographs. A closer, sharper photograph of the label usually helps.', { key: 'none' }));
+    }
+    if (rd.codes) {
+      out.push(rd.codes.length ? ui.card({ key: 'codes', title: 'Barcodes in the photographs' }, h('div.list', null, rd.codes.map(function (v) {
+        const mac = R.macFormat(v);
+        return h('div.row', { key: v }, h('span.row-main', null, h('span.row-title.mono', null, v)), h('span.row-right.btn-row.wrap', null,
+          ui.btn('Serial', { sm: true, kind: 'ghost', onclick: function () { const msg = AS.applyRead(d.id, 'serial_number', v, 'label'); EV.toast(msg, /added/.test(msg) ? 'ok' : 'warn', 4500); } }),
+          R.macValid(mac) ? ui.btn('MAC', { sm: true, kind: 'ghost', onclick: function () { const msg = AS.applyRead(d.id, 'mac_address', mac, 'label'); EV.toast(msg, /added/.test(msg) ? 'ok' : 'warn', 4500); } }) : null));
+      })), h('p.field-hint', null, 'Choose where each value belongs.')) : ui.note('info', 'No barcode was found in the photographs.', { key: 'nocodes' }));
+    }
+    return out.length ? h('div.stack', { key: 'reader', style: 'gap:8px' }, out) : null;
+  }
   AS.open = function (id) {
+    const rd = { busy: false, err: '', res: null, codes: null, codesBusy: false };
     const sheet = ui.openSheet({
       size: 'full',
       title: function () { const d = store.get('devices', id); return d ? ([d.manufacturer, d.model].filter(Boolean).join(' ') || R.deviceType(d)) : 'Asset'; },
@@ -334,7 +403,8 @@
             photos.length ? P.strip(photos) : h('p.muted', null, 'No photographs.'),
             store.readOnly ? null : h('div.btn-row.wrap', null,
               P.captureButton({ key: 'as-cam-' + d.id, sm: true, label: 'Add photograph', ctx: function () { return { room: room, device_id: d.id, category: 'Equipment labels', description: d.code }; } }),
-              P.captureButton({ key: 'as-lib-' + d.id, sm: true, kind: 'ghost', label: 'Upload', library: true, ctx: function () { return { room: room, device_id: d.id, category: 'Equipment labels', description: d.code }; } }))),
+              P.captureButton({ key: 'as-lib-' + d.id, sm: true, kind: 'ghost', label: 'Upload', library: true, ctx: function () { return { room: room, device_id: d.id, category: 'Equipment labels', description: d.code }; } })),
+            labelReader(d, rd)),
           h('div.form-group', null,
             h('div.form-group-title', null, 'Identity'),
             h('div.form-grid', null,

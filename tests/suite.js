@@ -2394,6 +2394,33 @@
     eq([ID.confirm(cap2.id).category, store.all('asset_taxonomy').filter(function (t) { return t.kind === 'category'; }).length - before], ['PoE injector', 1], 'no second entry');
     eq([I.ensureCategory('display'), I.ensureCategory(''), I.categoryGroups().find(function (g) { return g[0] === 'Other'; })[1].indexOf('PoE injector') >= 0], ['Display', '', true], 'a built-in name keeps its spelling; the new one is under Other');
   });
+  test('a label in a photograph already taken can be read later: values are offered, added only when chosen, and never replace a verified one', async function () {
+    const room = invRoom('I-11');
+    const d = I.create(room, { category: 'Room collaboration system', manufacturer: 'Neat', model: 'Bar Pro', mac_address: '00:00:5E:00:53:77', mac_status: 'verified_onsite' }, {}, { confirm: true });
+    await EV.photos.ingest([await imageFile('front')], { room: room, device_id: d.id, category: 'Device front' });
+    await EV.photos.ingest([await imageFile('S/N NB-LABEL-1')], { room: room, device_id: d.id, category: 'Equipment labels' });
+    eq(EV.assets.labelPhotos(d.id)[0].category, 'Equipment labels', 'the label photograph is sent first');
+    let sent = null;
+    EV.ai.transport = async function (method, body) {
+      if (method === 'GET') return { enabled: true, configured: true, provider: 'stub', model: 's' };
+      sent = body;
+      return { devices: [{ manufacturer: { value: 'Neat', confidence: 'confirmed', evidence: 'logo' }, serial_number: { value: 'NB-LABEL-1', evidence: 'visible_text', image_index: 0 },
+        mac_address: { value: '00-00-5E-00-53-99', evidence: 'visible_text' }, ip_address: { value: '', evidence: 'not_visible' } }] };
+    };
+    try {
+      EV.assets.open(d.id); await wait(120);
+      document.getElementById('asset-read-label').click();
+      for (let i = 0; i < 40 && !document.querySelector('.sheet .card .row-title.mono'); i++) await wait(50);
+      eq([sent.images.length, Array.prototype.map.call(document.querySelectorAll('.sheet .card .row-title.mono'), function (x) { return x.textContent; })], [2, ['NB-LABEL-1', '00:00:5E:00:53:99']]);
+      eq(store.get('devices', d.id).serial_number, '', 'nothing is added before it is chosen');
+      Array.prototype.find.call(document.querySelectorAll('.sheet .card button'), function (b) { return /Add to device/.test(b.textContent); }).click();
+      await wait(60);
+      const now = store.get('devices', d.id);
+      eq([now.serial_number, now.field_sources.serial_number, now.serial_status], ['NB-LABEL-1', 'ai', 'unknown']);
+      eq(/verified and is not replaced/.test(EV.assets.applyRead(d.id, 'mac_address', '00:00:5E:00:53:99')), true, 'the verified MAC stays');
+      eq([store.get('devices', d.id).mac_address, /already recorded/.test(EV.assets.applyRead(d.id, 'serial_number', 'nb-label-1'))], ['00:00:5E:00:53:77', true]);
+    } finally { EV.ai.transport = null; EV.ui.closeAll(); }
+  });
   /* ------------------------------------------------------------------ runner */
   function render() {
     const ol = document.getElementById('results');
