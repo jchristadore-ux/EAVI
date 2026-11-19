@@ -320,6 +320,7 @@
     const d = cap.draft || { values: {}, sources: {}, statuses: {} };
     const values = {};
     I.SOURCED.forEach(function (k) { if (!U.blank(d.values[k])) values[k] = String(d.values[k]).trim(); });
+    if (values.category) values.category = I.ensureCategory(values.category);
     if (values.mac_address) values.mac_address = R.macFormat(values.mac_address);
     I.ID_FIELDS.forEach(function (f) { values[f.s] = d.statuses[f.s] || 'unknown'; if (values[f.s] === 'unavailable' || values[f.s] === 'not_applicable') values[f.k] = ''; });
     /* identity is confirmed only when there is one to confirm; a missing manufacturer or model already lists the asset
@@ -610,7 +611,9 @@
         ui.label('Device details'),
         h('div.form-grid', null,
           ui.field(h('span', null, 'Device category', h('span.req', null, ' *'), ' ', srcChip('category')),
-            h('div.stack', { style: 'gap:6px' }, ui.select(d.values.category || '', I.categoryOptions(d.values.category), { id: 'ident-category', placeholder: 'Choose…', onchange: function (v) { set('category', v); } }),
+            h('div.stack', { style: 'gap:6px' }, h('div.combo', null,
+              ui.input(d.values.category || '', { id: 'ident-category', list: 'dl-ident-category', ph: 'Choose from the list, or type a new category', oninput: function (v) { set('category', v); } }),
+              h('datalist', { id: 'dl-ident-category' }, I.categories().map(function (x) { return h('option', { key: x, value: x }); }))),
               ((d.suggest || {}).category || []).length ? h('div.chip-scroll', null, d.suggest.category.map(function (s) { return h('button', { type: 'button', key: s, 'class': 'pill', onclick: function () { set('category', s, 'ai', true); } }, s); })) : null),
             { key: 'category', div: true }),
           textField('manufacturer', 'Manufacturer', { half: true, list: I.manufacturers() }),

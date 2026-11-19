@@ -59,7 +59,7 @@ code (`AVEI-DV-0001` …) is the asset ID.
 | Asset ID | `code`, system-generated, never reused |
 | Building, floor, room | from the room the device was captured in; *Move to another room* records the move in the history |
 | Department | on the room (`rooms.department`) |
-| Device category | from the shared category list (37 built-in in 7 groups; administrators add their own or hide built-in ones under Settings). Never free text |
+| Device category | picked from the shared list (37 built-in in 7 groups) or typed: a new name (for example "PoE injector") is added to the list (group Other) when the device is saved and is offered in every room after that; the same name in other capitals reuses the listed one. Administrators can hide entries under Settings |
 | Manufacturer, model | manufacturer offers the shared list but accepts any name |
 | Serial number, MAC address, IP address | each with its own status: Unknown, Verified onsite, Verified from management system, Awaiting IT, Awaiting vendor, **Not accessible / unavailable**, Not applicable |
 | Notes | optional (make, product family, function, hostname and asset tag were removed from the inventory screens on 19 November 2026; the columns stay in the database, and the legacy *Technical record* still edits hostname and role) |

@@ -2382,6 +2382,18 @@
     eq(I.metrics().listed >= 5, true);
   });
 
+  test('a device category can be typed: a new one joins the shared list once, and the same name in other capitals reuses it', function () {
+    const room = invRoom('I-10');
+    const before = store.all('asset_taxonomy').filter(function (t) { return t.kind === 'category'; }).length;
+    const cap = ID.newCapture(room);
+    ID.setValue(cap.id, 'category', ' PoE   injector '); ID.setValue(cap.id, 'manufacturer', 'Phihong'); ID.setValue(cap.id, 'model', 'POE30U-560G');
+    const d = ID.confirm(cap.id);
+    eq([d.category, I.categories().indexOf('PoE injector') >= 0, store.all('asset_taxonomy').filter(function (t) { return t.kind === 'category'; }).length - before], ['PoE injector', true, 1]);
+    const cap2 = ID.newCapture(room);
+    ID.setValue(cap2.id, 'category', 'poe INJECTOR'); ID.setValue(cap2.id, 'manufacturer', 'Phihong'); ID.setValue(cap2.id, 'model', 'POE60U');
+    eq([ID.confirm(cap2.id).category, store.all('asset_taxonomy').filter(function (t) { return t.kind === 'category'; }).length - before], ['PoE injector', 1], 'no second entry');
+    eq([I.ensureCategory('display'), I.ensureCategory(''), I.categoryGroups().find(function (g) { return g[0] === 'Other'; })[1].indexOf('PoE injector') >= 0], ['Display', '', true], 'a built-in name keeps its spelling; the new one is under Other');
+  });
   /* ------------------------------------------------------------------ runner */
   function render() {
     const ol = document.getElementById('results');

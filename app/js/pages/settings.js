@@ -86,7 +86,7 @@
       if (ex) store.update('asset_taxonomy', ex.id, { archived: true }); else store.create('asset_taxonomy', { kind: 'category', name: name, group_name: '', archived: true, sort_order: null, notes: 'Built-in category hidden' });
     };
     return ui.card({ key: 'tax', title: 'Device categories and manufacturers' },
-      h('p.muted', null, 'One shared list keeps the inventory consistent: categories are chosen from it, never typed freely. ' + (can ? 'Add your own, or hide a built-in category that is not used. A hidden category stays on the assets that have it.' : 'Only the workspace administrator can change the lists.')),
+      h('p.muted', null, 'One shared list keeps the inventory consistent. A category typed while recording a device that is not in the list is added to it (group Other), so the next room offers it; the same name in other capitals is the same category. ' + (can ? 'Add your own, or hide a built-in category that is not used. A hidden category stays on the assets that have it.' : 'Only the workspace administrator can change the lists.')),
       can ? h('div.form-grid', null,
         ui.field('Add', ui.seg(tx.kind, [['category', 'Category'], ['manufacturer', 'Manufacturer']], { onchange: function (v) { tx.kind = v; } }), { div: true }),
         ui.field('Name', ui.input(tx.name, { id: 'tax-name', oninput: function (v) { tx.name = v; } }), { half: true }),

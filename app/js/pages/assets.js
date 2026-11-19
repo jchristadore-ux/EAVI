@@ -338,7 +338,12 @@
           h('div.form-group', null,
             h('div.form-group-title', null, 'Identity'),
             h('div.form-grid', null,
-              ui.field(h('span', null, 'Device category', ' ', srcChip(d, 'category')), ui.select(d.category || '', I.categoryOptions(d.category), { id: 'as-category', disabled: store.readOnly, placeholder: 'Choose…', onchange: function (v) { I.update(store.get('devices', d.id), { category: v }); } }), { key: 'category', div: true }),
+              ui.field(h('span', null, 'Device category', ' ', srcChip(d, 'category')), h('div.combo', null,
+                ui.input(d.category || '', { id: 'as-category', list: 'dl-as-category', disabled: store.readOnly, ph: 'Choose from the list, or type a new category',
+                  oninput: function (v) { I.update(store.get('devices', d.id), { category: v }); },
+                  /* when the field is left: a new name joins the list, a known one takes the list's spelling */
+                  onchange: function (v) { const name = I.ensureCategory(v); const cur = store.get('devices', d.id); if (cur && name && name !== cur.category) I.update(cur, { category: name }); } }),
+                h('datalist', { id: 'dl-as-category' }, I.categories().map(function (x) { return h('option', { key: x, value: x }); }))), { key: 'category', div: true }),
               textRow(d, 'manufacturer', 'Manufacturer', { half: true, list: I.manufacturers() }), textRow(d, 'model', 'Model', { half: true, mono: true }),
               ui.field('Needs manual review', ui.toggle(!!d.manual_review, { disabled: store.readOnly, onchange: function (on) { store.update('devices', d.id, { manual_review: on }); } }), { div: true, cls: 'field-toggle', key: 'mr', hint: 'Keeps the asset listed as needing identification, whatever has been recorded.' }))),
           h('div.form-group', null,

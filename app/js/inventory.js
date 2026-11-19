@@ -34,6 +34,20 @@
     const names = S.MANUFACTURERS.concat(rows.filter(function (t) { return !t.archived; }).map(function (t) { return t.name; }));
     return U.uniq(names.filter(function (n) { return n && !hidden.has(n.toLowerCase()); })).sort(U.natCmp);
   });
+  /* A category typed by hand: the existing entry when the name is already listed (whatever its capitals), otherwise
+     a new entry in the shared list (group Other), so the next room offers it. Returns the name to store. */
+  I.ensureCategory = function (name) {
+    const n = String(name == null ? '' : name).replace(/\s+/g, ' ').trim();
+    if (!n) return '';
+    const hit = I.categories().find(function (c) { return c.toLowerCase() === n.toLowerCase(); });
+    if (hit) return hit;
+    const row = store.all('asset_taxonomy').find(function (t) { return t.kind === 'category' && String(t.name).toLowerCase() === n.toLowerCase(); });
+    if (row) { if (!store.readOnly) store.update('asset_taxonomy', row.id, { archived: false }); return row.name; }
+    const builtIn = S.DEVICE_CATEGORIES.find(function (c) { return c.toLowerCase() === n.toLowerCase(); });
+    if (builtIn) return builtIn;
+    if (!store.readOnly) store.create('asset_taxonomy', { kind: 'category', name: n, group_name: 'Other', archived: false, sort_order: null, notes: 'Added when a device was recorded' });
+    return n;
+  };
   /* who may change the shared lists: anyone on a device-only installation; the workspace administrator otherwise */
   I.canAdmin = function () {
     if (store.readOnly) return false;
