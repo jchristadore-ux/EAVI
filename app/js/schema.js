@@ -235,7 +235,7 @@
         'switch_asset_id~infra_assets connected_switch switch_port connection_type poe_required poe_class power_source rack_location monitoring_portal ' +
         'management_url warranty_info support_expiration:date notes archived:bool ' +
         'make product_family asset_tag identity_confirmed_at:ts identity_confirmed_by field_sources:json manual_review:bool last_verified_at:ts ' +
-        'ai_identification_id~asset_identifications merged_into~devices distinct_from:json exported_at:ts export_code export_sig presence listed_text'
+        'ai_identification_id~asset_identifications merged_into~devices distinct_from:json exported_at:ts export_code export_sig presence listed_text port_status'
     },
     switch_ports: {
       label: 'Switch port',
@@ -319,7 +319,7 @@
       followups: [['status', opt(['open', 'resolved', 'dismissed'])]],
       spare_items: [['lifecycle', opt(S.SPARE_LIFECYCLE)]],
       rooms: [['inventory_status', opt(S.ROOM_INVENTORY)]],
-      devices: [['ip_status', ID], ['mac_status', ID], ['serial_status', ID], ['presence', opt(S.PRESENCE)]],
+      devices: [['ip_status', ID], ['mac_status', ID], ['serial_status', ID], ['port_status', ID], ['presence', opt(S.PRESENCE)]],
       asset_identifications: [['status', opt(S.IDENTIFICATION_STATUS)]],
       asset_taxonomy: [['kind', opt(['category', 'manufacturer'])]],
       export_profiles: [['format', opt(S.EXPORT_FORMATS)]],

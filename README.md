@@ -68,7 +68,7 @@ powershell -ExecutionPolicy Bypass -File tools\serve.ps1
 | Address | What |
 |---|---|
 | `http://localhost:5173/app/` | The application (development copy) |
-| `http://localhost:5173/tests/tests.html` | The automated test suite (74 tests) |
+| `http://localhost:5173/tests/tests.html` | The automated test suite (77 tests) |
 | `http://localhost:5173/tests/embed.html` | The single-file build inside a frame |
 
 Build the deployable site, the single-file page and the source package:
@@ -96,7 +96,7 @@ dist/         build output (not in version control)
 
 | | |
 |---|---|
-| Automated tests | 74 of 74 pass, in a real browser on a real IndexedDB database (19 November 2026) |
+| Automated tests | 77 of 77 pass, in a real browser on a real IndexedDB database (19 November 2026) |
 | AI identification | **Never run against a real provider** (no key available); tested with a stand-in service only |
 | Generated files | Export ZIP, CSVs, PDFs and workbooks validated by independent readers (.NET, Microsoft Excel, Windows PDF engine) |
 | Offline | Verified: the built site starts and works with the server stopped |

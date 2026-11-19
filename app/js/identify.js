@@ -209,7 +209,7 @@
   function draftFrom(d) {
     const values = {}, sources = {}, statuses = {}, src = I.sources(d);
     I.SOURCED.forEach(function (k) { if (!U.blank(d[k])) { values[k] = d[k]; sources[k] = src[k] || 'existing'; } });
-    I.ID_FIELDS.forEach(function (f) { if (d[f.s] && d[f.s] !== 'unknown') statuses[f.s] = d[f.s]; });
+    I.IDS.forEach(function (f) { if (d[f.s] && d[f.s] !== 'unknown') statuses[f.s] = d[f.s]; });
     return { values: values, sources: sources, statuses: statuses, suggest: {}, picked: {} };
   }
   ID.newCapture = function (room, target) {
@@ -271,7 +271,7 @@
         if (String(out.values[k]).trim().toLowerCase() !== String(fill.values[k]).trim().toLowerCase()) out.suggest = Object.assign({}, out.suggest, (function () { const o = {}; o[k] = U.uniq([fill.values[k]].concat(out.suggest[k] || [])); return o; })());
         return;
       }
-      const f = I.ID_FIELDS.find(function (x) { return x.k === k; });
+      const f = I.IDS.find(function (x) { return x.k === k; });
       /* "not accessible" or "not applicable" was a person's answer */
       if (f && (out.statuses[f.s] === 'unavailable' || out.statuses[f.s] === 'not_applicable')) return;
       out.values[k] = fill.values[k]; out.sources[k] = 'ai';
@@ -293,7 +293,7 @@
     next.values[k] = v;
     if (U.blank(v)) delete next.sources[k]; else next.sources[k] = source || 'manual';
     if (picked) next.picked[k] = true; else delete next.picked[k];
-    const f = I.ID_FIELDS.find(function (x) { return x.k === k; });
+    const f = I.IDS.find(function (x) { return x.k === k; });
     if (f && !U.blank(v) && (next.statuses[f.s] === 'unavailable' || next.statuses[f.s] === 'not_applicable')) next.statuses[f.s] = 'unknown';
     if (f && (next.statuses[f.s] === 'verified_onsite' || next.statuses[f.s] === 'verified_mgmt') && String(v || '').trim() !== String(was || '').trim()) next.statuses[f.s] = 'unknown';
     store.update('asset_identifications', capId, { draft: next });
@@ -304,7 +304,7 @@
     const d = cap.draft || { values: {}, sources: {}, statuses: {} };
     const next = { values: Object.assign({}, d.values), sources: Object.assign({}, d.sources), statuses: Object.assign({}, d.statuses), suggest: d.suggest || {}, picked: Object.assign({}, d.picked || {}) };
     next.statuses[statusKey] = v;
-    const f = I.ID_FIELDS.find(function (x) { return x.s === statusKey; });
+    const f = I.IDS.find(function (x) { return x.s === statusKey; });
     if (f && (v === 'unavailable' || v === 'not_applicable')) { next.values[f.k] = ''; delete next.sources[f.k]; }
     store.update('asset_identifications', capId, { draft: next });
   };
@@ -322,7 +322,9 @@
     I.SOURCED.forEach(function (k) { if (!U.blank(d.values[k])) values[k] = String(d.values[k]).trim(); });
     if (values.category) values.category = I.ensureCategory(values.category);
     if (values.mac_address) values.mac_address = R.macFormat(values.mac_address);
-    I.ID_FIELDS.forEach(function (f) { values[f.s] = d.statuses[f.s] || 'unknown'; if (values[f.s] === 'unavailable' || values[f.s] === 'not_applicable') values[f.k] = ''; });
+    I.IDS.forEach(function (f) { values[f.s] = d.statuses[f.s] || 'unknown'; if (values[f.s] === 'unavailable' || values[f.s] === 'not_applicable') values[f.k] = ''; });
+    /* a device with an IP address is saved only with its switch port, or with the port stated as not accessible / not applicable */
+    if (ID.portMissing({ values: values, statuses: d.statuses })) throw new Error('Enter the switch port ID for this device (it has an IP address), or mark the port as not accessible.');
     /* identity is confirmed only when there is one to confirm; a missing manufacturer or model already lists the asset
        as needing identification, and it stops doing so as soon as both are recorded */
     const identified = !U.blank(values.manufacturer) && !U.blank(values.model) && !U.blank(values.category);
@@ -337,7 +339,7 @@
       let cur = target;
       Object.keys(bySrc).forEach(function (s) { cur = I.update(cur, bySrc[s], s) || cur; });
       const st2 = { presence: '', ai_identification_id: cap.id, manual_review: !!opts.manualReview };
-      I.ID_FIELDS.forEach(function (f) { if (values[f.s] !== (cur[f.s] || 'unknown')) st2[f.s] = values[f.s]; if ((values[f.s] === 'verified_onsite' || values[f.s] === 'verified_mgmt')) st2.last_verified_at = U.now(); });
+      I.IDS.forEach(function (f) { if (values[f.s] !== (cur[f.s] || 'unknown')) st2[f.s] = values[f.s]; if ((values[f.s] === 'verified_onsite' || values[f.s] === 'verified_mgmt')) st2.last_verified_at = U.now(); });
       if (identified && !opts.manualReview) { st2.identity_confirmed_at = U.now(); st2.identity_confirmed_by = store.actor(); st2.last_verified_at = U.now(); }
       cur = store.update('devices', cur.id, st2);
       store.log({ action: 'updated', table: 'devices', rec: cur, summary: cur.code + ' seen in the room and confirmed' + (cur.listed_text ? ' (' + cur.listed_text + ')' : '') });
@@ -356,6 +358,10 @@
     if (!cap) return;
     P.forIdentification(capId).forEach(function (p) { if (!p.device_id) P.remove(p); });
     store.update('asset_identifications', capId, { status: 'discarded' });
+  };
+  ID.portMissing = function (d) {
+    const v = d.values || {}, s = d.statuses || {};
+    return !U.blank(v.ip_address) && s.ip_status !== 'unavailable' && s.ip_status !== 'not_applicable' && U.blank(v.switch_port) && s.port_status !== 'unavailable' && s.port_status !== 'not_applicable';
   };
   ID.validation = function (d) {
     const v = d.values || {}, out = [];
@@ -426,6 +432,7 @@
       if (U.blank(d.values.category)) { EV.toast('Choose the device category.', 'warn', 3600); return undefined; }
       const problems = ID.validation(d);
       if (problems.length) { EV.toast(problems.join(' '), 'warn', 4200); return undefined; }
+      if (ID.portMissing(d)) { EV.toast('This device has an IP address: enter its switch port ID, or mark the port as not accessible.', 'warn', 5000); const el = document.getElementById('ident-switch_port'); if (el) el.focus(); return undefined; }
       const missing = ['manufacturer', 'model'].filter(function (k) { return U.blank(d.values[k]); });
       const ask = missing.length ? ui.confirm({ title: 'Save without ' + missing.join(' and ') + '?', message: 'The device is saved to this room and listed as needing identification until the ' + missing.join(' and ') + ' are recorded.', confirm: 'Save' }) : Promise.resolve(true);
       return ask.then(function (ok) {
@@ -599,10 +606,13 @@
         h('div.ident-head', null, h('span.field-label', null, f.label, ' ', srcChip(f.k))),
         h('div.ident-row', null,
           ui.input(d.values[f.k] || '', { id: 'ident-' + f.k, mono: true, disabled: off, inputmode: f.k === 'ip_address' ? 'decimal' : undefined,
-            ph: off ? S.label(S.ID_STATUS, st2) : f.k === 'mac_address' ? '00:00:00:00:00:00' : f.k === 'ip_address' ? '0.0.0.0' : 'As printed on the label',
+            ph: off ? S.label(S.ID_STATUS, st2) : f.k === 'mac_address' ? '00:00:00:00:00:00' : f.k === 'ip_address' ? '0.0.0.0' : f.k === 'switch_port' ? 'e.g. Gi1/0/12 or 1/0/18' : 'As printed on the label',
             oninput: function (v) { set(f.k, f.k === 'mac_address' ? R.macFormat(v) : f.k === 'ip_address' ? v.trim() : v); } }),
           ui.select(st2, S.ID_STATUS, { empty: false, cls: 'ident-status', aria: f.label + ' status', onchange: function (v) { ensure(); ID.setStatus(st.capId, f.s, v); } })),
-        h('span.field-hint', null, off ? 'Recorded as ' + S.label(S.ID_STATUS, st2).toLowerCase() + '. The asset is not counted as missing it.' : U.blank(d.values[f.k]) ? 'Leave empty if not visible, or choose “Not accessible” or “Not applicable”.' : 'Captured. Set a “Verified” status once checked.'));
+        h('span', { 'class': U.cx('field-hint', f.k === 'switch_port' && !off && U.blank(d.values[f.k]) && 'hint-warn') },
+          off ? 'Recorded as ' + S.label(S.ID_STATUS, st2).toLowerCase() + '. The asset is not counted as missing it.'
+            : f.k === 'switch_port' && U.blank(d.values[f.k]) ? 'Required for a device with an IP address: the switch port it is patched to. If it cannot be traced, choose “Not accessible”.'
+              : U.blank(d.values[f.k]) ? 'Leave empty if not visible, or choose “Not accessible” or “Not applicable”.' : 'Captured. Set a “Verified” status once checked.'));
     }
     function fieldsSection(c) {
       const d = draft();
@@ -619,7 +629,9 @@
           textField('manufacturer', 'Manufacturer', { half: true, list: I.manufacturers() }),
           textField('model', 'Model', { half: true, mono: true }),
           null),
-        h('div.form-grid', null, I.ID_FIELDS.slice().sort(function (a, b) { return ['serial_number', 'mac_address', 'ip_address'].indexOf(a.k) - ['serial_number', 'mac_address', 'ip_address'].indexOf(b.k); }).map(idField)),
+        h('div.form-grid', null, I.ID_FIELDS.slice().sort(function (a, b) { return ['serial_number', 'mac_address', 'ip_address'].indexOf(a.k) - ['serial_number', 'mac_address', 'ip_address'].indexOf(b.k); }).map(idField),
+          /* the switch port is asked for once there is an IP address */
+          !U.blank(d.values.ip_address) ? idField(I.PORT) : null),
         problems.length ? ui.note('warn', problems.join(' ')) : null,
         h('div.form-grid', null,
           ui.field('Notes', ui.textarea(d.values.notes || '', { rows: 2, id: 'ident-notes', oninput: function (v) { set('notes', v); } }), { key: 'notes' })));

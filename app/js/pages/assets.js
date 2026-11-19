@@ -9,7 +9,7 @@
   /* ------------------------------------------------------------------ filters */
   const FILTERS = [['all', 'All assets'], ['listed', 'Listed — not yet seen'], ['seen', 'Seen (captured or confirmed)'], ['verified', 'Manually verified'], ['partial', 'Partially verified'], ['ai_review', 'AI identified — awaiting review'],
     ['needs_identification', 'Needs identification'], ['incomplete', 'Incomplete information'], ['missing_serial', 'Serial number not captured'],
-    ['missing_mac', 'MAC address not captured'], ['missing_ip', 'IP address not captured'], ['missing_identity', 'Manufacturer or model missing'],
+    ['missing_mac', 'MAC address not captured'], ['missing_ip', 'IP address not captured'], ['missing_port', 'Switch port ID not captured (has an IP address)'], ['missing_identity', 'Manufacturer or model missing'],
     ['duplicates', 'Shares an identifier with another asset'], ['ready', 'Ready for export'], ['exported', 'Exported'], ['changed', 'Changed since export'], ['archived', 'Archived']];
   AS.FILTERS = FILTERS;
   AS.matches = function (d, f) {
@@ -23,6 +23,7 @@
       case 'missing_serial': return a.states.serial_number === 'not_captured';
       case 'missing_mac': return a.states.mac_address === 'not_captured';
       case 'missing_ip': return a.states.ip_address === 'not_captured';
+      case 'missing_port': return a.states.switch_port === 'not_captured';
       case 'missing_identity': return a.missingIdentity.indexOf('Manufacturer') >= 0 || a.missingIdentity.indexOf('Model') >= 0;
       case 'duplicates': return I.duplicateIds().has(d.id);
       case 'ready': return a.status === 'verified' && a.exportState !== 'current';

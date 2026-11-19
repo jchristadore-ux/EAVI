@@ -84,6 +84,7 @@
               qualityRow('ser', 'Serial number not captured', m.missing.serial_number, 'Not counted: marked not accessible or not applicable', '/assets?filter=missing_serial', 'warn'),
               qualityRow('mac', 'MAC address not captured', m.missing.mac_address, 'Not counted: marked not accessible or not applicable', '/assets?filter=missing_mac', 'warn'),
               qualityRow('ip', 'IP address not captured', m.missing.ip_address, 'Not counted: marked not accessible or not applicable', '/assets?filter=missing_ip', 'warn'),
+              qualityRow('port', 'Switch port ID not captured', m.missing.switch_port, 'Devices with an IP address and no switch port recorded', '/assets?filter=missing_port', 'warn'),
               qualityRow('mm', 'Manufacturer or model missing', m.missing.identity, 'Listed as needing identification', '/assets?filter=missing_identity', 'danger'),
               qualityRow('dup', 'Potential duplicate assets', m.duplicates, 'Same serial number or MAC address' + (m.possible ? ' · ' + m.possible + ' weaker matches to check' : ''), '/assets?tab=duplicates', 'danger'),
               qualityRow('ai', 'AI identifications not yet verified', m.aiReview + m.pending, m.pending + ' captures awaiting review · ' + m.aiReview + ' assets', '/identify', 'warn'),

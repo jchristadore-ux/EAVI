@@ -35,6 +35,8 @@
     ['mac_status', 'MAC address status', function (d) { return stLabel(d.mac_status); }],
     ['ip_address', 'IP address', function (d) { return d.ip_address; }],
     ['ip_status', 'IP address status', function (d) { return stLabel(d.ip_status); }],
+    ['switch_port', 'Switch port ID', function (d) { return d.switch_port; }],
+    ['port_status', 'Switch port status', function (d) { return stLabel(d.port_status); }],
     ['firmware_version', 'Firmware version', function (d) { return d.firmware_version; }],
     ['primary_photo', 'Primary photograph (photo ID)', function (d) { const p = P.forDevice(d.id); return p.length ? p[p.length - 1].code : ''; }],
     ['photo_count', 'Number of photographs', function (d) { return P.forDevice(d.id).length; }],
@@ -60,7 +62,7 @@
 
   /* ------------------------------------------------------------------ mappings */
   const STANDARD = ['asset_id', 'building', 'floor', 'room_number', 'room_name', 'department', 'category', 'manufacturer', 'model', 'serial_number',
-    'mac_address', 'ip_address', 'primary_photo', 'identification_source', 'verification_status', 'date_captured', 'last_verified', 'notes'];
+    'mac_address', 'ip_address', 'switch_port', 'primary_photo', 'identification_source', 'verification_status', 'date_captured', 'last_verified', 'notes'];
   XA.standard = function () {
     return { id: 'standard', name: 'Standard asset export', target_system: 'Any system (this application\'s own field names)', format: 'csv', builtIn: true,
       mapping: STANDARD.map(function (k) { return { target: SRC.get(k)[1], source: k, required: k === 'asset_id' || k === 'building' || k === 'category' }; }), options: {} };
@@ -76,7 +78,7 @@
     ['category', ['device type', 'type', 'category', 'device category', 'class', 'asset type']], ['manufacturer', ['manufacturer', 'vendor', 'mfr', 'mfg', 'oem']],
     ['model', ['model', 'product model', 'model number', 'part number', 'product']],
     ['serial_number', ['serial', 'serial number', 'serial no', 'sn', 's/n']],
-    ['mac_address', ['mac', 'mac address', 'hardware address', 'ethernet address']], ['ip_address', ['ip', 'ip address', 'management ip', 'mgmt ip', 'address ip', 'ipv4']],
+    ['mac_address', ['mac', 'mac address', 'hardware address', 'ethernet address']], ['ip_address', ['ip', 'ip address', 'management ip', 'mgmt ip', 'address ip', 'ipv4']], ['switch_port', ['port', 'switch port', 'port id', 'switchport', 'interface', 'switch interface']],
     
     ['firmware_version', ['firmware', 'firmware version', 'version']], ['notes', ['notes', 'comments', 'remarks']], ['date_captured', ['date captured', 'created', 'discovered', 'install date']],
     ['last_verified', ['last verified', 'verified on', 'last seen']], ['verification_status', ['status', 'verification', 'verification status']]

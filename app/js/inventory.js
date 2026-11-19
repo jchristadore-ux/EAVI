@@ -59,6 +59,10 @@
   /* ------------------------------------------------------------------ fields and their states */
   /* identifiers: value + status column (verified, not accessible, not applicable…) */
   I.ID_FIELDS = R.ID_FIELDS;
+  /* the switch port a networked device is connected to: required once the device has an IP address */
+  I.PORT = { k: 'switch_port', s: 'port_status', label: 'Switch port ID', short: 'Port' };
+  I.IDS = I.ID_FIELDS.concat([I.PORT]);
+  I.portRequired = function (d) { return !U.blank(d.ip_address); };
   I.ID_STATE_LABEL = { verified: 'Verified', captured: 'Captured — not verified', unavailable: 'Not accessible', na: 'Not applicable', not_captured: 'Not captured yet' };
   I.ID_STATE_TONE = { verified: 'ok', captured: 'warn', unavailable: 'muted', na: 'muted', not_captured: 'danger' };
   I.idState = function (d, f) {
@@ -70,7 +74,7 @@
   /* The fields an asset record is made of, in the order the screens show them. */
   I.FIELDS = [
     { k: 'category', label: 'Device category' }, { k: 'manufacturer', label: 'Manufacturer' }, { k: 'model', label: 'Model' },
-    { k: 'serial_number', label: 'Serial number', id: true }, { k: 'mac_address', label: 'MAC address', id: true }, { k: 'ip_address', label: 'IP address', id: true },
+    { k: 'serial_number', label: 'Serial number', id: true }, { k: 'mac_address', label: 'MAC address', id: true }, { k: 'ip_address', label: 'IP address', id: true }, { k: 'switch_port', label: 'Switch port ID', id: true },
     { k: 'notes', label: 'Notes' }
   ];
   I.SOURCED = I.FIELDS.map(function (f) { return f.k; });
@@ -96,6 +100,13 @@
       if (s === 'not_captured') notCaptured.push(f.label);
       if (s === 'captured') unverified.push(f.label);
     });
+    /* a device with an IP address must also have its switch port recorded (or stated as not accessible / not applicable) */
+    if (I.portRequired(d)) {
+      const ps = I.idState(d, I.PORT);
+      states.switch_port = ps;
+      if (ps === 'not_captured') notCaptured.push(I.PORT.label);
+      if (ps === 'captured') unverified.push(I.PORT.label);
+    } else states.switch_port = 'not_required';
     const invalid = [];
     if (!U.blank(d.ip_address) && !R.ipValid(d.ip_address)) invalid.push('IP address format');
     if (!U.blank(d.mac_address) && !R.macValid(d.mac_address)) invalid.push('MAC address format');
@@ -131,7 +142,7 @@
     /* everything an export column can be made of (pages/integration.js, XA.SOURCES) */
     const photos = store.by('photos', 'device_id', d.id);
     const parts = I.SOURCED.map(function (k) { return d[k] == null ? '' : String(d[k]); })
-      .concat([d.custom_category, d.firmware_version, d.ip_status, d.mac_status, d.serial_status, d.room_id, d.floor_id, d.building_id,
+      .concat([d.custom_category, d.firmware_version, d.ip_status, d.mac_status, d.serial_status, d.port_status || '', d.room_id, d.floor_id, d.building_id,
         room ? room.code + '|' + room.number + '|' + room.name + '|' + (room.department || '') : '',
         floor ? floor.number : '', b ? b.name + '|' + (b.identifier || '') + '|' + (b.address || '') : '', d.identity_confirmed_at || '', d.identity_confirmed_by || '',
         d.last_verified_at || '', JSON.stringify(d.field_sources || {}), d.manual_review ? '1' : '', d.archived ? '1' : '', d.presence || '',
@@ -180,7 +191,7 @@
     const floors = store.all('floors').filter(function (f) { return !f.archived && buildings.some(function (b) { return b.id === f.building_id; }); });
     const m = { buildings: buildings.length, floors: floors.length, rooms: rooms.length, roomsComplete: 0, roomsInProgress: 0, assets: assets.length, listed: 0,
       pending: I.pending().length, needsId: 0, aiReview: 0, incomplete: 0, verified: 0, partial: 0, ready: 0, exported: 0, changed: 0,
-      missing: { serial_number: 0, mac_address: 0, ip_address: 0, identity: 0 }, byField: {}, duplicates: 0, possible: 0 };
+      missing: { serial_number: 0, mac_address: 0, ip_address: 0, switch_port: 0, identity: 0 }, byField: {}, duplicates: 0, possible: 0 };
     I.ID_FIELDS.forEach(function (f) { m.byField[f.k] = { verified: 0, captured: 0, unavailable: 0, na: 0, not_captured: 0 }; });
     rooms.forEach(function (r) { const s = I.roomStatus(r); if (s === 'complete') m.roomsComplete++; else if (s === 'in_progress') m.roomsInProgress++; });
     assets.forEach(function (d) {
@@ -195,6 +206,7 @@
       if (a.exportState === 'changed') m.changed++;
       if (a.status === 'verified' && a.exportState !== 'current') m.ready++;
       I.ID_FIELDS.forEach(function (f) { m.byField[f.k][a.states[f.k]]++; if (a.states[f.k] === 'not_captured') m.missing[f.k]++; });
+      if (a.states.switch_port === 'not_captured') m.missing.switch_port++;
       if (a.missingIdentity.indexOf('Manufacturer') >= 0 || a.missingIdentity.indexOf('Model') >= 0) m.missing.identity++;
     });
     const dup = I.duplicates();
@@ -335,7 +347,7 @@
     out.field_sources = setSources(d, sub, source || 'manual');
     /* a value typed into an identifier that was marked "not accessible" is no longer not accessible */
     /* ...and a changed value is not the value someone verified */
-    I.ID_FIELDS.forEach(function (f) {
+    I.IDS.forEach(function (f) {
       if (!(f.k in sub)) return;
       if (!U.blank(sub[f.k]) && (d[f.s] === 'unavailable' || d[f.s] === 'not_applicable')) out[f.s] = 'unknown';
       else if ((d[f.s] === 'verified_onsite' || d[f.s] === 'verified_mgmt') && String(sub[f.k] || '').trim() !== String(d[f.k] || '').trim()) out[f.s] = 'unknown';
@@ -359,7 +371,7 @@
     /* the same empty record the legacy device editor starts from, so both screens keep working on every asset */
     const rec = {
       building_id: room.building_id, floor_id: room.floor_id, room_id: room.id, rack_id: null, audit_id: null, category: '', custom_category: '', role: '',
-      manufacturer: '', model: '', hostname: '', ip_address: '', ip_status: 'unknown', mac_address: '', mac_status: 'unknown', serial_number: '', serial_status: 'unknown',
+      manufacturer: '', model: '', hostname: '', ip_address: '', ip_status: 'unknown', mac_address: '', mac_status: 'unknown', serial_number: '', serial_status: 'unknown', port_status: 'unknown',
       subnet: '', vlan: '', ip_assignment: '', dns_name: '', firmware_version: '', app_version: '', switch_asset_id: null, connected_switch: '', switch_port: '',
       connection_type: '', poe_required: '', poe_class: '', power_source: '', rack_location: '', monitoring_portal: '', management_url: '', warranty_info: '',
       support_expiration: null, notes: '', archived: false, make: '', product_family: '', asset_tag: '', distinct_from: [], presence: '', listed_text: ''
@@ -369,7 +381,7 @@
     I.SOURCED.forEach(function (k) { if (!U.blank(rec[k])) fs[k] = (sources && sources[k]) || 'manual'; });
     rec.field_sources = fs;
     if (opts.confirm) { rec.identity_confirmed_at = U.now(); rec.identity_confirmed_by = store.actor(); rec.last_verified_at = U.now(); }
-    if (I.ID_FIELDS.some(function (f) { return rec[f.s] === 'verified_onsite' || rec[f.s] === 'verified_mgmt'; })) rec.last_verified_at = U.now();
+    if (I.IDS.some(function (f) { return rec[f.s] === 'verified_onsite' || rec[f.s] === 'verified_mgmt'; })) rec.last_verified_at = U.now();
     if (opts.identification) rec.ai_identification_id = opts.identification.id;
     rec.manual_review = !!opts.manualReview;
     const d = store.create('devices', rec, opts.silent ? { silent: true } : undefined);
@@ -390,7 +402,7 @@
      that is not verified. Returns { field: reason } for the values that may not be taken. */
   I.mergeBlocks = function (keep, drop) {
     const out = {};
-    I.ID_FIELDS.forEach(function (f) {
+    I.IDS.forEach(function (f) {
       if (I.idState(keep, f) === 'verified' && I.idState(drop, f) !== 'verified' && !U.blank(drop[f.k]) && drop[f.k] !== keep[f.k]) out[f.k] = 'The kept value is verified; the other is not.';
     });
     if (keep.identity_confirmed_at && !drop.identity_confirmed_at) ['manufacturer', 'model', 'category'].forEach(function (k) {
@@ -401,7 +413,7 @@
   /* columns that describe the record itself, its place or its bookkeeping: never copied from one record to another */
   const NOT_MERGED = { code: 1, building_id: 1, floor_id: 1, room_id: 1, audit_id: 1, rack_id: 1, identity_confirmed_at: 1, identity_confirmed_by: 1, field_sources: 1,
     manual_review: 1, last_verified_at: 1, ai_identification_id: 1, merged_into: 1, distinct_from: 1, exported_at: 1, export_code: 1, export_sig: 1, archived: 1,
-    ip_status: 1, mac_status: 1, serial_status: 1, custom_category: 1 };
+    ip_status: 1, mac_status: 1, serial_status: 1, port_status: 1, custom_category: 1 };
   const ID_RANK = { verified_onsite: 4, verified_mgmt: 4, not_applicable: 3, unavailable: 2, awaiting_it: 1, awaiting_vendor: 1, unknown: 0 };
   const same = function (a, b) { return String(a == null ? '' : a).trim().toLowerCase() === String(b == null ? '' : b).trim().toLowerCase(); };
   /* the other columns (firmware, switch port, VLAN, warranty…) that the kept record lacks and the merged one has */
@@ -421,7 +433,7 @@
       if (useDrop || fill) { patch[k] = drop[k]; fs[k] = dropSrc[k] || 'existing'; }
     });
     if ('category' in patch) patch.custom_category = drop.custom_category || '';
-    I.ID_FIELDS.forEach(function (f) {
+    I.IDS.forEach(function (f) {
       const ks = keep[f.s] || 'unknown', ds = drop[f.s] || 'unknown';
       if (f.k in patch) patch[f.s] = ds;
       /* the same value on both: it is as verified as the better of the two says */

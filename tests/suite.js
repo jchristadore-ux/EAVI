@@ -2146,7 +2146,7 @@
   test('export engine: scope and verification rules, field mapping from the portal\'s header, a validation report, CSV / JSON / Excel files, and exported assets that know when they have changed since', async function () {
     const room = invRoom('I-4');
     const v1 = I.create(room, { category: 'Control processor', manufacturer: 'Crestron', model: 'CP4N', serial_number: 'CP4-1', serial_status: 'verified_onsite', mac_address: '00:00:5E:00:53:D1', mac_status: 'verified_onsite',
-      ip_address: '192.0.2.41', ip_status: 'verified_mgmt', notes: '=HYPERLINK("x")' }, {}, { confirm: true });
+      ip_address: '192.0.2.41', ip_status: 'verified_mgmt', switch_port: 'Gi1/0/41', port_status: 'verified_onsite', notes: '=HYPERLINK("x")' }, {}, { confirm: true });
     const p1 = I.create(room, { category: 'Touch panel', manufacturer: 'Crestron', model: 'TSW-1070', mac_address: '00:00:5E:00:53:D2' }, {}, { confirm: true });
     const bad = I.create(room, { category: 'Touch panel', manufacturer: 'Crestron', model: 'TSW-770', mac_address: '00:00:5E:00:53', serial_number: 'CP4-1', serial_status: 'unknown' }, {}, { confirm: true });
     const o = { scope: 'room', scopeId: room.id, which: 'all', include: 'verified', profile: 'standard', format: 'csv' };
@@ -2420,6 +2420,30 @@
       eq(/verified and is not replaced/.test(EV.assets.applyRead(d.id, 'mac_address', '00:00:5E:00:53:99')), true, 'the verified MAC stays');
       eq([store.get('devices', d.id).mac_address, /already recorded/.test(EV.assets.applyRead(d.id, 'serial_number', 'nb-label-1'))], ['00:00:5E:00:53:77', true]);
     } finally { EV.ai.transport = null; EV.ui.closeAll(); }
+  });
+  test('a device with an IP address needs its switch port ID: it is asked for, required to save, counted when missing, and can be stated as not accessible', function () {
+    const room = invRoom('I-12');
+    const cap = ID.newCapture(room);
+    ID.setValue(cap.id, 'category', 'Video conferencing codec'); ID.setValue(cap.id, 'manufacturer', 'Cisco'); ID.setValue(cap.id, 'model', 'Room Kit');
+    ID.setValue(cap.id, 'ip_address', '192.0.2.77');
+    let msg = ''; try { ID.confirm(cap.id); } catch (e) { msg = e.message; }
+    assert(/switch port ID/.test(msg) && store.get('asset_identifications', cap.id).status === 'draft', 'not saved without the port: ' + msg);
+    ID.setValue(cap.id, 'switch_port', 'Gi1/0/12');
+    const d = ID.confirm(cap.id);
+    eq([d.switch_port, d.port_status, d.field_sources.switch_port, I.asset(d).states.switch_port], ['Gi1/0/12', 'unknown', 'manual', 'captured']);
+    const cap2 = ID.newCapture(room);
+    ID.setValue(cap2.id, 'category', 'Display'); ID.setValue(cap2.id, 'manufacturer', 'LG'); ID.setValue(cap2.id, 'model', '55UH5F'); ID.setValue(cap2.id, 'ip_address', '192.0.2.78');
+    ID.setStatus(cap2.id, 'port_status', 'unavailable');
+    const d2 = ID.confirm(cap2.id);
+    eq([d2.port_status, I.asset(d2).states.switch_port, I.asset(d2).notCaptured.indexOf('Switch port ID')], ['unavailable', 'unavailable', -1], 'a port stated as not accessible is an answer');
+    const before = I.metrics().missing.switch_port;
+    const d3 = I.create(room, { category: 'Touch panel', manufacturer: 'Crestron', model: 'TSW-770', ip_address: '192.0.2.79' }, {}, { confirm: true });
+    eq([I.asset(d3).states.switch_port, I.asset(d3).notCaptured.indexOf('Switch port ID') >= 0, I.asset(d3).status, I.metrics().missing.switch_port - before, EV.assets.matches(d3, 'missing_port')],
+      ['not_captured', true, 'partial', 1, true]);
+    const d4 = I.create(room, { category: 'Display', manufacturer: 'LG', model: '43UH5F' }, {}, { confirm: true });
+    eq(I.asset(d4).states.switch_port, 'not_required', 'no IP address, no port needed');
+    eq(I.update(store.get('devices', d.id), { switch_port: 'Gi1/0/13' }).field_sources.switch_port, 'manual');
+    assert(XA.SOURCES.some(function (s) { return s[0] === 'switch_port'; }), 'the port can be exported');
   });
   /* ------------------------------------------------------------------ runner */
   function render() {
