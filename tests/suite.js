@@ -2218,10 +2218,12 @@
     assert(rp && rpi && rpi.getAttribute('capture') === 'environment' && rp.closest('#room-details'), 'the room details photograph the room itself in one tap');
     const shot = (await EV.photos.ingest([await imageFile('room view')], { room: room, category: 'Room overview' }))[0];
     await wait(80);
-    assert(Array.prototype.some.call(document.querySelectorAll('#room-details .gallery .thumb'), function (t) { return t.title === 'Room overview'; }), 'and the room details show the room photographs');
-    const det = document.querySelector('#room-details .label-row button'); det.click(); await wait(100);
-    assert(document.getElementById('room-photo-sheet') && document.querySelectorAll('.sheet .gallery .thumb').length >= 1, 'the Room details sheet has them too');
-    EV.ui.closeAll(); await wait(50);
+    eq([EV.roomPhoto(room.id).id, document.querySelectorAll('#room-details .room-photo-img').length], [shot.id, 1], 'the room details show one photograph of the room: the latest');
+    const later = (await EV.photos.ingest([await imageFile('room again')], { room: room, category: 'Room overview' }))[0];
+    await wait(80);
+    eq([EV.roomPhoto(room.id).id, document.querySelectorAll('#room-details .room-photo-img').length, !!store.get('photos', shot.id)], [later.id, 1, true], 'a new one takes its place; the earlier one is kept');
+    const secs = Array.prototype.map.call(document.querySelectorAll('.page-roomsRoom .label'), function (x) { return x.textContent; });
+    assert(secs.indexOf('Devices in this room') >= 0 && secs.indexOf('Devices in this room') < secs.indexOf('Room details'), 'the devices stay above the room details: ' + secs.join(' | '));
     eq(['manufacturer', 'model', 'make', 'product_family', 'role', 'hostname', 'asset_tag'].map(function (k) { return I.FIELDS.some(function (f) { return f.k === k; }); }), [true, true, false, false, false, false, false], 'make, product family, function, hostname and asset tag are not inventory fields');
     EV.assets.open(ctx.invA); await wait(100);
     assert(/Identity|Identifiers/.test(document.querySelector('.sheet').textContent), 'asset record');

@@ -90,22 +90,23 @@
         h('span.asset-ids', null, I.ID_FIELDS.slice().reverse().map(function (f) { return h('span', { key: f.k, 'class': 'asset-id' }, h('span.asset-id-k', null, f.short), idText(d, a, f)); }))),
       h('span.asset-right', null, ui.chip(I.statusLabel(a.status), I.STATUS_TONE[a.status]), a.exportState !== 'never' ? ui.chip(I.EXPORT_LABEL[a.exportState], a.exportState === 'current' ? 'accent' : 'warn') : null));
   };
-  /* photographs of the room itself (not of a device, not part of a device capture), part of the room details */
-  function roomPhotoBlock(room, where) {
-    const photos = P.forRoom(room.id).filter(function (ph) { return !ph.device_id && !ph.identification_id; });
+  /* the photograph of the room itself: the most recent one taken of the room (not of a device, not part of a device
+     capture). A new one takes its place on screen; earlier ones stay stored. */
+  EV.roomPhoto = function (roomId) {
+    return P.forRoom(roomId).filter(function (ph) { return !ph.device_id && !ph.identification_id; })[0] || null;
+  };
+  function roomPhotoBlock(room) {
+    const photo = EV.roomPhoto(room.id);
     const ctx = function () { return { room: store.get('rooms', room.id), category: 'Room overview', description: R.roomLabel(store.get('rooms', room.id) || room) }; };
     const started = function () { const cur = store.get('rooms', room.id); if (cur && !cur.inventory_status) store.update('rooms', cur.id, { inventory_status: 'in_progress' }, { silent: true }); };
-    const sfx = where === 'sheet' ? '-sheet' : '';
-    return h('div.stack', { key: 'room-photos' + sfx, style: 'gap:8px' },
-      h('div.label-row', null, h('span.label', null, 'Room photographs'), h('span.count', null, String(photos.length))),
-      store.readOnly ? null : h('div.btn-row.wrap', null,
-        P.captureButton({ key: 'room-photo' + sfx + '-' + room.id, label: 'Photograph the room', kind: 'secondary', id: 'room-photo' + sfx, ctx: ctx, after: started }),
-        P.captureButton({ key: 'room-photo-lib' + sfx + '-' + room.id, label: 'Upload', kind: 'ghost', library: true, ctx: ctx, after: started })),
-      photos.length ? P.gallery(photos, { caption: false }) : h('p.muted', null, 'No photographs of the room yet. A wide view from the door and one of the table and display wall are usually enough.'));
+    return h('div.room-photo', { key: 'room-photo' },
+      photo ? h('button', { type: 'button', 'class': 'room-photo-img', id: 'room-photo-view', title: 'Room photograph', onclick: function () { P.openViewer(photo.id, [photo.id]); } },
+        photo.thumb ? h('img', { src: photo.thumb, alt: 'Photograph of ' + R.roomLabel(room) }) : icon('image', 28))
+        : h('div.room-photo-none', null, icon('camera', 24), h('span', null, 'No photograph of the room yet')),
+      store.readOnly ? null : P.captureButton({ key: 'room-photo-' + room.id, sm: true, kind: 'secondary', label: photo ? 'Retake room photo' : 'Photograph the room', id: 'room-photo', ctx: ctx, after: started }));
   }
   function editRoom(room) {
-    return ui.openEditor({ table: 'rooms', id: room.id, fields: S.F.inventoryRoom, title: 'Room details', sub: room.code, strict: false, size: 'auto', canDelete: false,
-      after: function (r) { return h('div.form-group', { key: 'photos' }, roomPhotoBlock(r, 'sheet')); } });
+    return ui.openEditor({ table: 'rooms', id: room.id, fields: S.F.inventoryRoom, title: 'Room details', sub: room.code, strict: false, size: 'auto', canDelete: false });
   }
   /* every room's listed equipment (display, camera and microphone details) becomes listed assets, after a preview */
   EV.inventoryListAll = function () {
@@ -195,7 +196,7 @@
           ui.kv('Inventory status', I.roomStatusLabel(s)),
           ui.kv('Last inventory activity', last ? U.fmtDateTime(last) : ''),
           room.inventory_completed_at ? ui.kv('Marked complete', U.fmtDateTime(room.inventory_completed_at) + (room.inventory_completed_by ? ' · ' + room.inventory_completed_by : '')) : null),
-        roomPhotoBlock(room, 'page')),
+        roomPhotoBlock(room)),
       h('div.room-actions', null,
         s === 'complete'
           ? ui.btn('Reopen room inventory', { icon: 'undo', id: 'room-reopen', onclick: function () { store.update('rooms', room.id, { inventory_status: 'in_progress', inventory_completed_at: null, inventory_completed_by: '' }); } })
