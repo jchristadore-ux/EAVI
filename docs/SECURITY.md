@@ -217,7 +217,9 @@ the folder it writes to. It is not part of the product and must never be deploye
    workspace, what data may be uploaded, retention, who may access the Project.
 8. **AI identification authorisation** — only if AI identification of device photographs is wanted (flow 4): which
    provider and model, the provider's data retention terms, which workspace. Record who approved it and when; only
-   then set `AI_IDENTIFICATION_ENABLED=true` on the server. Not recorded anywhere as of 19 November 2026.
+   then set `AI_IDENTIFICATION_ENABLED=true` on the server. **Set on 19 November 2026 at the project owner's explicit
+   instruction; the client's approval of sending photographs to Anthropic is not recorded.** No provider key was set
+   on that date, so no photograph has been sent.
 
 ## 6. Reporting a concern
 

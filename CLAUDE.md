@@ -66,7 +66,7 @@ powershell -ExecutionPolicy Bypass -File tools\validate-outputs.ps1   # check th
 ## State at handoff
 
 - Version 1.0.0. The automated suite passed in full on the last run of this session; the count and the list are
-  in `docs/TEST_REPORT.md` (54 tests at the 12 November handoff; 73 on 19 November, see below).
+  in `docs/TEST_REPORT.md` (54 tests at the 12 November handoff; 74 on 19 November, see below).
 - **Demo data is out of production.** `app/` has no seed; the set-up screen, Command Center and Settings offer no
   demo environment when `EV.seed` is absent. Demo-labelling code (`is_demo`, `A.removeDemo`) remains so that a
   device that once loaded the demo can still remove it.
@@ -98,14 +98,21 @@ powershell -ExecutionPolicy Bypass -File tools\validate-outputs.ps1   # check th
 - Built on the existing tables: an asset is a `devices` row (its code is the asset ID). New tables
   `asset_identifications` (captures + the original AI answer), `asset_taxonomy`, `export_profiles`, `asset_exports`;
   new columns on rooms, devices and photos (list in `docs/INVENTORY.md` section 6). IndexedDB version is now 2.
-- **Deploy order matters:** run the regenerated `supabase/schema.sql` in the Supabase SQL editor (it is idempotent
-  and only adds) **before** the new client reaches the deployed site, or synchronisation fails on the new columns.
-  The deploy workflow publishes on every push to `main`, so do not push before the SQL has run.
-- **AI identification has never run against a real provider.** Client side: `app/js/identify.js`, tested with a
-  stand-in (`EV.ai.transport`). Server side: `supabase/functions/identify-device/index.ts`, written by a sub-agent,
-  never deployed, executed or type-checked (no Deno here). It refuses to call a provider unless the function secret
-  `AI_IDENTIFICATION_ENABLED=true` is set, which is the recorded authorization step. Default model
-  `claude-opus-5-5`; see `docs/AI_IDENTIFICATION.md`. No authorization is recorded.
+- **Deployed 19 November 2026.** The upgrade (`supabase/upgrade-2026-11-19-asset-inventory.sql`) was run in the
+  Supabase SQL editor before the push: 23 columns, 4 tables with row-level security, 12 policies, 16 triggers; the 99
+  rooms, 10 devices and 2 buildings were unchanged. Then pushed; the Pages workflow succeeded and the live site serves
+  the new version. For later schema changes the order stays the same: SQL first, then push (every push deploys).
+- **Listed equipment:** the rooms' display / camera / microphone configuration (from the NY room list import, 81 of
+  99 rooms) can be turned into assets marked "Listed - not yet seen" (Room Inventory -> *List equipment from room
+  details*, or per room). Not yet run on the live data: that is done from the app by a signed-in user.
+- **AI identification:** the function `identify-device` was deployed on 19 November 2026 through the Supabase
+  dashboard editor (source taken unchanged from GitHub). Secrets set: `ALLOWED_ORIGINS` (Pages origin and
+  localhost:5173), `AI_PROVIDER=anthropic`, `AI_IDENTIFICATION_ENABLED=true` - set at the owner's explicit instruction
+  ("do everything for me ... AI identification enabled", 19 November 2026). The client's security approval of sending
+  photographs to Anthropic is still **not** recorded. `ANTHROPIC_API_KEY` is **not** set (a credential: the owner
+  enters it). Checked from outside: the pre-flight answers for the Pages origin, an unsigned request gets 401. Never
+  called with a real image. "Verify JWT with legacy secret" is still on (changing it was refused by the permission
+  check); if the app reports an invalid JWT, the owner turns it off - the function checks the user itself.
 - Fixed on the way: `EV.xlsx.simple` named its tables `tbl1`..., which Excel refuses (reads as a cell reference);
   `tools/validate-outputs.ps1` now uses one Excel instance per workbook (calls were rejected while a previous
   workbook recalculated).

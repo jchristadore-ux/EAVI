@@ -29,7 +29,7 @@ What was tested, how, with what result — and what was not. Date of this run: *
 > **Later run, 13 November 2026 (room list import update mode; Presentation room type):** 61 tests; **60 pass**,
 > including the new update-mode test. *Offline shell* fails for the same browser-pane reason as above.
 >
-> **Later run, 19 November 2026 (asset inventory; Legacy Command Center):** 73 tests; **73 pass**, including
+> **Later run, 19 November 2026 (asset inventory; Legacy Command Center):** 74 tests; **74 pass**, including
 > *offline shell* this time and the eleven new inventory tests in §4.6. An independent review of the new code raised 24
 > findings (§6); all were fixed, and tests 70–73 cover the serious ones. The phone-layout test (46) now also covers the
 > nine inventory screens and four inventory sheets: no sideways overflow at 390 px, every tapped control at least
@@ -184,6 +184,7 @@ text. They do not show that the SQL runs, or that Supabase behaves as the mocks 
 | 71 | merge keeps verification | The same serial on both records keeps the stronger (verified) status; the confirmed identity that results is kept; firmware, switch port and warranty fill the kept record's gaps and are listed in the merge sheet |
 | 72 | export state | A change to the room, a technical field or a photograph marks an exported asset as changed at once; a change made while the file is being saved is not marked as exported |
 | 73 | registry links, room page, older database | A link into the registry shows exactly what it names; the room page writes nothing while shown; a sync against a database without the new columns says to run `supabase/schema.sql` and keeps the changes queued |
+| 74 | listed equipment | Room details become listed assets without guessing (N/A skipped, quantities counted, a bar named twice is one device, misspelt names not corrected); listing twice adds nothing; listed assets are not in the audit screens, follow-ups or quality filters; a capture confirms a listed asset in place; a capture can be linked to one; "not in this room" archives it and it is not listed again |
 | 69 | upgrade in place | The new object stores exist; `supabase/schema.sql` adds every new column with `if not exists` and re-applies the identifier status list with `unavailable`; no value list exists only inside a `create table`; the daily export's device columns are unchanged |
 ## 5. Manual checks (11–12 November 2026)
 

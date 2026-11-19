@@ -4,7 +4,7 @@ The application's primary purpose is now an **AV asset inventory**: find every p
 and where it is, capture its identifiers, and export clean records for the monitoring portal. The earlier audit
 workspace is kept whole as the **Legacy Command Center** (see section 8).
 
-Status (19 November 2026): built and covered by the automated suite (73 tests, 11 of them for this inventory, plus the phone-layout test for its screens). An independent review found 24 defects; all were fixed and the serious ones have tests.
+Status (19 November 2026): built and covered by the automated suite (74 tests, 12 of them for this inventory, plus the phone-layout test for its screens). An independent review found 24 defects; all were fixed and the serious ones have tests.
 **AI identification has never run against a real AI provider** — no key was available. The client side is tested
 against a stand-in service; the server function is written but has not been deployed or executed
 ([AI_IDENTIFICATION.md](AI_IDENTIFICATION.md)). Not tested on a physical phone.
@@ -26,6 +26,26 @@ keeps a capture under **Identify Devices** until someone reviews it. On Android 
 barcode or QR value found in a photograph as serial, MAC or asset tag (the person chooses); browsers without the
 Barcode Detection API (iPhone Safari) do not show the button. *Crop* adds a cropped copy of a photograph (for
 example one device out of a rack); the original is kept.
+
+## 1a. Equipment already listed for a room
+
+Rooms imported from the room list carry their equipment as text in *Display configuration*, *Camera
+configuration* and *Microphone configuration* (for example "Samsung QM55R (LH55QMRE)", "Neat Bar (NEATBARPRO-SE)",
+"Shure Ceiling X4"). **Room Inventory -> List equipment from room details** (all rooms, with a preview) or the note
+on a room turns each item into an asset marked **Listed - not yet seen**:
+
+- the text is kept exactly (`listed_text`); "N/A" and empty values are skipped;
+- quantities are counted: "X4", "x12", "(x2)", "5x ..." give that many assets;
+- the same text named for the camera and the microphones (a video bar) is one *Room collaboration system*;
+- the category comes from the column (display, camera, microphone endpoint); the manufacturer only when the text
+  starts with a known name; the rest stays, as written, in the model. Nothing is corrected ("Creston" stays unknown);
+- listing again adds nothing (also not after an item was merged, deleted or marked not found).
+
+In the room, each listed asset has **Found - photograph** (the capture confirms that asset: it becomes seen, keeps
+its ID, and each value keeps its source), **Confirm without photo**, and **Not in this room** (recorded in its notes and
+archived). A new capture in a room with listed equipment asks whether it is one of them. Listed assets are counted
+separately on the dashboard, do not start a room, are not in the quality figures, and stay out of the legacy audit
+screens, follow-up tasks and daily export until they are seen.
 
 ## 2. The asset record
 
