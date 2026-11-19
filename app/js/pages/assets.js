@@ -277,11 +277,12 @@
     return h('div.field.ident', { key: f.k },
       h('div.ident-head', null, h('span.field-label', null, f.label, ' ', srcChip(d, f.k)), ui.chip(I.ID_STATE_LABEL[s], I.ID_STATE_TONE[s])),
       h('div.ident-row', null,
-        ui.input(d[f.k] || '', { id: 'as-' + f.k, mono: true, disabled: off || store.readOnly, ph: off ? S.label(S.ID_STATUS, status) : '',
+        ui.input(d[f.k] || '', { id: 'as-' + f.k, mono: true, disabled: off || store.readOnly, ph: off ? S.label(S.ID_STATUS, status) : f.k === 'switch_port' ? 'e.g. Gi1/0/12 or 1/0/18' : '',
           oninput: function (v) { I.update(store.get('devices', d.id), set(f.k, f.k === 'ip_address' ? v.trim() : v)); },
           onchange: function (v) { if (v !== v.trim()) I.update(store.get('devices', d.id), set(f.k, v.trim())); } }),
         ui.select(status, S.ID_STATUS, { empty: false, cls: 'ident-status', disabled: store.readOnly, aria: f.label + ' status', onchange: function (v) { I.setIdStatus(store.get('devices', d.id), f, v); } })),
-      a.invalid.some(function (x) { return x.indexOf(f.label.split(' ')[0]) === 0; }) ? h('span.field-error', null, f.k === 'mac_address' ? 'A MAC address has 12 hexadecimal digits.' : 'This is not a valid IP address.') : null);
+      a.invalid.some(function (x) { return x.indexOf(f.label.split(' ')[0]) === 0; }) ? h('span.field-error', null, f.k === 'mac_address' ? 'A MAC address has 12 hexadecimal digits.' : 'This is not a valid IP address.') : null,
+      f.k === 'switch_port' && s === 'not_captured' ? h('span.field-hint.hint-warn', null, 'Required because this device has an IP address: the switch port it is patched to. If it cannot be traced, set the status to “Not accessible”.') : null);
   }
   function aiCard(d) {
     const cap = d.ai_identification_id ? store.getAny('asset_identifications', d.ai_identification_id) : null;
@@ -415,7 +416,9 @@
               ui.field('Needs manual review', ui.toggle(!!d.manual_review, { disabled: store.readOnly, onchange: function (on) { store.update('devices', d.id, { manual_review: on }); } }), { div: true, cls: 'field-toggle', key: 'mr', hint: 'Keeps the asset listed as needing identification, whatever has been recorded.' }))),
           h('div.form-group', null,
             h('div.form-group-title', null, 'Identifiers'),
-            h('div.form-grid', null, ['serial_number', 'mac_address', 'ip_address'].map(function (k) { return idRow(d, I.ID_FIELDS.find(function (f) { return f.k === k; })); }))),
+            h('div.form-grid', null, ['serial_number', 'mac_address', 'ip_address'].map(function (k) { return idRow(d, I.ID_FIELDS.find(function (f) { return f.k === k; })); }),
+              /* asked for once the device has an IP address */
+              I.portRequired(d) ? idRow(d, I.PORT) : null)),
           h('div.form-group', null,
             h('div.form-group-title', null, 'Location and notes'),
             h('div.kv-list', null, ui.kv('Room', room ? R.roomLabel(room) + (room.department ? ' · ' + room.department : '') : 'No room'), ui.kv('Captured', U.fmtDateTime(d.created_at) + (d.created_by ? ' · ' + d.created_by : '')),

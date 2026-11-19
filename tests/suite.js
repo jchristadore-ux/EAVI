@@ -2414,6 +2414,21 @@
       ['Media converter', false, 'Media converter', true], 'the typed name is stored, the box closes, and the list now offers it');
     EV.ui.closeAll();
   });
+  test('the asset record shows the switch port field once the device has an IP address, and filling it clears the gap', async function () {
+    const room = invRoom('I-10c');
+    const d = I.create(room, { category: 'Touch panel', manufacturer: 'Crestron', model: 'TSW-1070' }, {}, { confirm: true });
+    EV.assets.open(d.id); await wait(80);
+    assert(!document.getElementById('as-switch_port'), 'no port field without an IP address');
+    const ip = document.getElementById('as-ip_address');
+    ip.value = '192.0.2.91'; ip.dispatchEvent(new Event('input', { bubbles: true })); await wait(80);
+    const port = document.getElementById('as-switch_port');
+    assert(port, 'the port field appears with the IP address');
+    eq(I.asset(store.get('devices', d.id)).states.switch_port, 'not_captured');
+    port.value = 'Gi1/0/12'; port.dispatchEvent(new Event('input', { bubbles: true })); await wait(60);
+    const after = store.get('devices', d.id);
+    eq([after.switch_port, after.field_sources.switch_port, I.asset(after).states.switch_port], ['Gi1/0/12', 'manual', 'captured']);
+    EV.ui.closeAll();
+  });
   test('a label in a photograph already taken can be read later: values are offered, added only when chosen, and never replace a verified one', async function () {
     const room = invRoom('I-11');
     const d = I.create(room, { category: 'Room collaboration system', manufacturer: 'Neat', model: 'Bar Pro', mac_address: '00:00:5E:00:53:77', mac_status: 'verified_onsite' }, {}, { confirm: true });
