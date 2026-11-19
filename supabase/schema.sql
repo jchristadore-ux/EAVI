@@ -462,6 +462,8 @@ create table if not exists public.devices (
   exported_at timestamptz,
   export_code text,
   export_sig text,
+  presence text,
+  listed_text text,
   created_at timestamptz not null,
   updated_at timestamptz not null,
   created_by text,
@@ -1056,6 +1058,8 @@ alter table public.devices add column if not exists distinct_from jsonb;
 alter table public.devices add column if not exists exported_at timestamptz;
 alter table public.devices add column if not exists export_code text;
 alter table public.devices add column if not exists export_sig text;
+alter table public.devices add column if not exists presence text;
+alter table public.devices add column if not exists listed_text text;
 alter table public.switch_ports add column if not exists switch_asset_id uuid;
 alter table public.switch_ports add column if not exists port text;
 alter table public.switch_ports add column if not exists description text;
@@ -1289,6 +1293,8 @@ alter table public.devices drop constraint if exists devices_mac_status_check;
 alter table public.devices add constraint devices_mac_status_check check (mac_status is null or mac_status in ('verified_onsite', 'verified_mgmt', 'awaiting_it', 'awaiting_vendor', 'unknown', 'unavailable', 'not_applicable', ''));
 alter table public.devices drop constraint if exists devices_serial_status_check;
 alter table public.devices add constraint devices_serial_status_check check (serial_status is null or serial_status in ('verified_onsite', 'verified_mgmt', 'awaiting_it', 'awaiting_vendor', 'unknown', 'unavailable', 'not_applicable', ''));
+alter table public.devices drop constraint if exists devices_presence_check;
+alter table public.devices add constraint devices_presence_check check (presence is null or presence in ('', 'listed', 'not_found'));
 alter table public.network_links drop constraint if exists network_links_kind_check;
 alter table public.network_links add constraint network_links_kind_check check (kind is null or kind in ('uplink', 'dependency', ''));
 alter table public.backlog_items drop constraint if exists backlog_items_priority_check;

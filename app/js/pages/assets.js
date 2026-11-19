@@ -7,15 +7,18 @@
   const st = { q: '', filter: 'all', building: '', floor: '', category: '', department: '', exp: '', tab: 'all', limit: 80, applied: '', select: false, picked: new Set() };
 
   /* ------------------------------------------------------------------ filters */
-  const FILTERS = [['all', 'All assets'], ['verified', 'Manually verified'], ['partial', 'Partially verified'], ['ai_review', 'AI identified — awaiting review'],
+  const FILTERS = [['all', 'All assets'], ['listed', 'Listed — not yet seen'], ['seen', 'Seen (captured or confirmed)'], ['verified', 'Manually verified'], ['partial', 'Partially verified'], ['ai_review', 'AI identified — awaiting review'],
     ['needs_identification', 'Needs identification'], ['incomplete', 'Incomplete information'], ['missing_serial', 'Serial number not captured'],
     ['missing_mac', 'MAC address not captured'], ['missing_ip', 'IP address not captured'], ['missing_identity', 'Manufacturer or model missing'],
     ['duplicates', 'Shares an identifier with another asset'], ['ready', 'Ready for export'], ['exported', 'Exported'], ['changed', 'Changed since export'], ['archived', 'Archived']];
   AS.FILTERS = FILTERS;
   AS.matches = function (d, f) {
     const a = I.asset(d);
+    /* a device not yet seen is not a gap in the captured inventory */
+    if (a.status === 'listed' && ['all', 'listed', 'duplicates', 'changed', 'exported'].indexOf(f) < 0) return false;
     switch (f) {
-      case 'verified': case 'partial': case 'ai_review': case 'needs_identification': return a.status === f;
+      case 'listed': case 'verified': case 'partial': case 'ai_review': case 'needs_identification': return a.status === f;
+      case 'seen': return a.status !== 'listed';
       case 'incomplete': return a.incomplete;
       case 'missing_serial': return a.states.serial_number === 'not_captured';
       case 'missing_mac': return a.states.mac_address === 'not_captured';

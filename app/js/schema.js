@@ -36,7 +36,8 @@
     'Control processor', 'Touch panel', 'Camera', 'Microphone processor'];
   S.MANUFACTURERS = ['QSC', 'Crestron', 'Extron', 'Biamp', 'Shure', 'Sennheiser', 'Poly', 'Logitech', 'Cisco', 'Zoom', 'Microsoft', 'Neat', 'Yealink',
     'Samsung', 'LG', 'Sony', 'Planar', 'Barco', 'Mersive', 'Lenovo', 'Dell', 'HP', 'AMX', 'Netgear', 'Aruba', 'APC', 'Middle Atlantic', 'Vaddio',
-    'AVer', 'Panasonic', 'Epson', 'Atlona', 'Kramer', 'Lightware', 'BrightSign', 'Audinate', 'Yamaha', 'Bose', 'JBL'];
+    'AVer', 'Panasonic', 'Epson', 'Atlona', 'Kramer', 'Lightware', 'BrightSign', 'Audinate', 'Yamaha', 'Bose', 'JBL',
+    'Polycom', 'Jabra', 'Avaya', 'Huddly', 'DTEN', '1Beyond', 'Sharp', 'Apple', 'Vaddio'];
   S.ID_STATUS = [['verified_onsite', 'Verified onsite'], ['verified_mgmt', 'Verified from management system'], ['awaiting_it', 'Awaiting IT confirmation'],
     ['awaiting_vendor', 'Awaiting vendor confirmation'], ['unknown', 'Unknown'], ['unavailable', 'Not accessible / unavailable'], ['not_applicable', 'Not applicable']];
   S.CONNECTION_TYPES = ['Wired — Ethernet', 'Wired — fiber', 'Wi-Fi', 'USB only', 'Serial / RS-232', 'HDBaseT', 'Not networked', 'Unknown'];
@@ -112,8 +113,12 @@
      application never scans a network. */
   S.FIELD_SOURCES = [['ai', 'AI image recognition'], ['label', 'Read from label photograph'], ['manual', 'Entered manually'], ['existing', 'Existing record'],
     ['import', 'Imported'], ['network', 'Network discovery']];
-  S.VERIFICATION = [['ai_review', 'AI identified — awaiting review'], ['verified', 'Manually verified'], ['partial', 'Partially verified'],
+  S.VERIFICATION = [['listed', 'Listed — not yet seen'], ['ai_review', 'AI identified — awaiting review'], ['verified', 'Manually verified'], ['partial', 'Partially verified'],
     ['needs_identification', 'Needs identification'], ['exported', 'Exported']];
+  /* devices.presence: '' = seen in the room; listed = known from a list (room details), not yet seen; not_found = listed, looked for, not there */
+  S.PRESENCE = [['', 'Seen'], ['listed', 'Listed — not yet seen'], ['not_found', 'Listed — not found']];
+  /* room details that name equipment, and the category a listed item gets from each */
+  S.LISTING_FIELDS = [['display_config', 'Display configuration', 'Display'], ['camera_config', 'Camera configuration', 'Camera'], ['microphone_config', 'Microphone configuration', 'Microphone endpoint']];
   S.IDENTIFICATION_STATUS = [['draft', 'Photographed'], ['analyzing', 'Being identified'], ['ready', 'AI identified — awaiting review'], ['failed', 'Identification failed'],
     ['confirmed', 'Confirmed'], ['discarded', 'Discarded']];
   S.ROOM_INVENTORY = [['', 'Not started'], ['in_progress', 'In progress'], ['complete', 'Complete']];
@@ -230,7 +235,7 @@
         'switch_asset_id~infra_assets connected_switch switch_port connection_type poe_required poe_class power_source rack_location monitoring_portal ' +
         'management_url warranty_info support_expiration:date notes archived:bool ' +
         'make product_family asset_tag identity_confirmed_at:ts identity_confirmed_by field_sources:json manual_review:bool last_verified_at:ts ' +
-        'ai_identification_id~asset_identifications merged_into~devices distinct_from:json exported_at:ts export_code export_sig'
+        'ai_identification_id~asset_identifications merged_into~devices distinct_from:json exported_at:ts export_code export_sig presence listed_text'
     },
     switch_ports: {
       label: 'Switch port',
@@ -302,7 +307,6 @@
     const opt = function (list) { const v = list.map(function (x) { return Array.isArray(x) ? x[0] : x; }); return v.indexOf('') < 0 ? v.concat(['']) : v; };
     const ID = opt(S.ID_STATUS);
     S.DB_CHECKS = {
-      devices: [['ip_status', ID], ['mac_status', ID], ['serial_status', ID]],
       audits: [['status', opt(S.AUDIT_STATUS)]],
       functional_tests: [['result', opt(S.TEST_RESULTS)], ['suggestion_state', opt(['none', 'pending', 'accepted', 'dismissed'])]],
       network_checks: [['status', opt(S.NETWORK_CHECK_STATUS)]],
@@ -315,6 +319,7 @@
       followups: [['status', opt(['open', 'resolved', 'dismissed'])]],
       spare_items: [['lifecycle', opt(S.SPARE_LIFECYCLE)]],
       rooms: [['inventory_status', opt(S.ROOM_INVENTORY)]],
+      devices: [['ip_status', ID], ['mac_status', ID], ['serial_status', ID], ['presence', opt(S.PRESENCE)]],
       asset_identifications: [['status', opt(S.IDENTIFICATION_STATUS)]],
       asset_taxonomy: [['kind', opt(['category', 'manufacturer'])]],
       export_profiles: [['format', opt(S.EXPORT_FORMATS)]],

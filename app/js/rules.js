@@ -93,16 +93,22 @@
     return r;
   };
   /* "Live" means in service and in scope: not archived itself, and not inside an archived room, floor or building. */
-  R.liveDevices = memo(function () {
+  /* in scope: not archived, not inside an archived room, floor or building. includeListed: also the devices the asset
+     inventory knows only from the room details (not yet seen), which the audit screens leave out */
+  function inScope(includeListed) {
     const rooms = new Set(R.liveRooms().map(function (r) { return r.id; }));
     return store.all('devices').filter(function (d) {
       if (d.archived) return false;
+      if (!includeListed && d.presence === 'listed') return false;
       if (d.room_id) return rooms.has(d.room_id);
       const f = store.get('floors', d.floor_id), b = store.get('buildings', d.building_id);
       return !(f && f.archived) && !(b && b.archived);
     });
-  });
-  R.roomDevices = function (roomId) { return store.by('devices', 'room_id', roomId).filter(function (d) { return !d.archived; }); };
+  }
+  R.liveDevices = memo(function () { return inScope(false); });
+  R.liveAssets = memo(function () { return inScope(true); });
+  R.roomDevices = function (roomId) { return store.by('devices', 'room_id', roomId).filter(function (d) { return !d.archived && d.presence !== 'listed'; }); };
+  R.roomAssets = function (roomId) { return store.by('devices', 'room_id', roomId).filter(function (d) { return !d.archived; }); };
   R.deviceStats = memo(function () {
     const devs = R.liveDevices();
     const out = { total: devs.length, networked: 0, incomplete: 0, verified: 0, missingIp: 0, missingMac: 0, missingSerial: 0, unverified: 0, missingRequired: 0,

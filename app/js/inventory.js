@@ -92,7 +92,8 @@
     if (U.blank(d.model)) missingIdentity.push('Model');
     const src = I.sources(d);
     let status;
-    if (d.manual_review || missingIdentity.length) status = 'needs_identification';
+    if (d.presence === 'listed' || d.presence === 'not_found') status = 'listed';
+    else if (d.manual_review || missingIdentity.length) status = 'needs_identification';
     else if (!d.identity_confirmed_at) status = src.manufacturer === 'ai' || src.model === 'ai' ? 'ai_review' : 'partial';
     else if (!unverified.length && !notCaptured.length && !invalid.length) status = 'verified';
     else status = 'partial';
@@ -104,7 +105,7 @@
     devCache.set(d, r);
     return r;
   };
-  I.STATUS_TONE = { ai_review: 'violet', verified: 'ok', partial: 'warn', needs_identification: 'danger', exported: 'accent' };
+  I.STATUS_TONE = { listed: 'muted', ai_review: 'violet', verified: 'ok', partial: 'warn', needs_identification: 'danger', exported: 'accent' };
   I.statusLabel = function (s) { return S.label(S.VERIFICATION, s); };
   I.EXPORT_LABEL = { never: 'Not exported', current: 'Exported', changed: 'Changed since export' };
 
@@ -120,14 +121,18 @@
       .concat([d.custom_category, d.firmware_version, d.ip_status, d.mac_status, d.serial_status, d.room_id, d.floor_id, d.building_id,
         room ? room.code + '|' + room.number + '|' + room.name + '|' + (room.department || '') : '',
         floor ? floor.number : '', b ? b.name + '|' + (b.identifier || '') + '|' + (b.address || '') : '', d.identity_confirmed_at || '', d.identity_confirmed_by || '',
-        d.last_verified_at || '', JSON.stringify(d.field_sources || {}), d.manual_review ? '1' : '', d.archived ? '1' : '',
+        d.last_verified_at || '', JSON.stringify(d.field_sources || {}), d.manual_review ? '1' : '', d.archived ? '1' : '', d.presence || '',
         photos.length + '|' + photos.map(function (p) { return p.code; }).sort().join(',')]);
     return I.hash(parts.join('\u0001'));
   };
 
   /* ------------------------------------------------------------------ the assets */
-  I.assets = R.liveDevices;
+  I.assets = R.liveAssets;
+  /* seen in the room (captured or confirmed) */
+  I.isListed = function (d) { return d.presence === 'listed' || d.presence === 'not_found'; };
   I.roomAssets = function (roomId) { return R.roomDevices(roomId); };
+  /* known from the room's details, not yet seen */
+  I.roomListed = function (roomId) { return U.sortBy(R.roomAssets(roomId).filter(function (d) { return d.presence === 'listed'; }), function (d) { return d.listed_text + ' ' + d.code; }); };
   /* identifications photographed but not yet confirmed or discarded */
   I.OPEN_IDENT = { draft: 1, analyzing: 1, ready: 1, failed: 1 };
   I.pending = R.memo(function () { return U.sortBy(store.all('asset_identifications').filter(function (x) { return I.OPEN_IDENT[x.status]; }), function (x) { return x.created_at; }, true); });
@@ -160,13 +165,14 @@
     const assets = I.assets(), rooms = I.liveRooms();
     const buildings = store.all('buildings').filter(function (b) { return !b.archived; });
     const floors = store.all('floors').filter(function (f) { return !f.archived && buildings.some(function (b) { return b.id === f.building_id; }); });
-    const m = { buildings: buildings.length, floors: floors.length, rooms: rooms.length, roomsComplete: 0, roomsInProgress: 0, assets: assets.length,
+    const m = { buildings: buildings.length, floors: floors.length, rooms: rooms.length, roomsComplete: 0, roomsInProgress: 0, assets: assets.length, listed: 0,
       pending: I.pending().length, needsId: 0, aiReview: 0, incomplete: 0, verified: 0, partial: 0, ready: 0, exported: 0, changed: 0,
       missing: { serial_number: 0, mac_address: 0, ip_address: 0, identity: 0 }, byField: {}, duplicates: 0, possible: 0 };
     I.ID_FIELDS.forEach(function (f) { m.byField[f.k] = { verified: 0, captured: 0, unavailable: 0, na: 0, not_captured: 0 }; });
     rooms.forEach(function (r) { const s = I.roomStatus(r); if (s === 'complete') m.roomsComplete++; else if (s === 'in_progress') m.roomsInProgress++; });
     assets.forEach(function (d) {
       const a = I.asset(d);
+      if (a.status === 'listed') { m.listed++; return; }   /* not yet seen: counted on its own, not in the quality figures */
       if (a.status === 'needs_identification') m.needsId++;
       if (a.status === 'ai_review') m.aiReview++;
       if (a.status === 'verified') m.verified++;
@@ -184,7 +190,8 @@
     /* "unique" = captured records less the extra records in each group that shares a serial number, MAC address or asset tag */
     const extra = new Set();
     dup.strong.forEach(function (g) { g.devices.slice(1).forEach(function (d) { extra.add(d.id); }); });
-    m.unique = assets.length - extra.size;
+    m.unique = assets.length - m.listed - extra.size;
+    m.captured = assets.length - m.listed;
     m.awaiting = m.pending + m.needsId;
     return m;
   });
@@ -241,7 +248,8 @@
     U.groupBy(assets.filter(function (d) { return d.room_id && !U.blank(d.manufacturer) && !U.blank(d.model); }), function (d) {
       return d.room_id + '|' + String(d.manufacturer).trim().toLowerCase() + '|' + String(d.model).trim().toLowerCase();
     }).forEach(function (list, key) {
-      if (list.length > 1 && open(list)) possible.push({ key: 'model:' + key, field: 'model', label: 'Same manufacturer and model in the same room', value: list[0].manufacturer + ' ' + list[0].model, devices: U.sortBy(list, function (d) { return d.code; }) });
+      /* several identical items listed for one room are simply several devices */
+      if (list.length > 1 && open(list) && !list.every(I.isListed)) possible.push({ key: 'model:' + key, field: 'model', label: 'Same manufacturer and model in the same room', value: list[0].manufacturer + ' ' + list[0].model, devices: U.sortBy(list, function (d) { return d.code; }) });
     });
     /* photographs that are (nearly) the same picture, linked to different assets: a secondary indicator only */
     const ph = store.all('photos').filter(function (p) { return p.phash && p.device_id; });
@@ -343,7 +351,7 @@
       manufacturer: '', model: '', hostname: '', ip_address: '', ip_status: 'unknown', mac_address: '', mac_status: 'unknown', serial_number: '', serial_status: 'unknown',
       subnet: '', vlan: '', ip_assignment: '', dns_name: '', firmware_version: '', app_version: '', switch_asset_id: null, connected_switch: '', switch_port: '',
       connection_type: '', poe_required: '', poe_class: '', power_source: '', rack_location: '', monitoring_portal: '', management_url: '', warranty_info: '',
-      support_expiration: null, notes: '', archived: false, make: '', product_family: '', asset_tag: '', distinct_from: []
+      support_expiration: null, notes: '', archived: false, make: '', product_family: '', asset_tag: '', distinct_from: [], presence: '', listed_text: ''
     };
     Object.keys(values).forEach(function (k) { if (values[k] !== undefined) rec[k] = values[k]; });
     const fs = {};
@@ -353,8 +361,8 @@
     if (I.ID_FIELDS.some(function (f) { return rec[f.s] === 'verified_onsite' || rec[f.s] === 'verified_mgmt'; })) rec.last_verified_at = U.now();
     if (opts.identification) rec.ai_identification_id = opts.identification.id;
     rec.manual_review = !!opts.manualReview;
-    const d = store.create('devices', rec);
-    if (room && !room.inventory_status) store.update('rooms', room.id, { inventory_status: 'in_progress' }, { silent: true });
+    const d = store.create('devices', rec, opts.silent ? { silent: true } : undefined);
+    if (room && !room.inventory_status && !I.isListed(rec)) store.update('rooms', room.id, { inventory_status: 'in_progress' }, { silent: true });
     return d;
   };
   /* Two records are different physical devices: they are no longer offered as duplicates of each other. */
@@ -451,6 +459,72 @@
     store.log({ action: 'updated', table: 'devices', rec: store.get('devices', keep.id), summary: 'Merged ' + drop.code + ' into ' + keep.code + ' (' + R.deviceLabel(keep) + ')',
       changes: Object.keys(patch).filter(function (k) { return k !== 'field_sources' && k !== 'distinct_from'; }).map(function (k) { return { f: k, from: keep[k] == null ? '' : String(keep[k]), to: patch[k] == null ? '' : String(patch[k]) }; }) });
     return { kept: store.get('devices', keep.id), blocked: blocked };
+  };
+
+  /* ------------------------------------------------------------------ equipment listed in the room details */
+  /* "Samsung QM55R (LH55QMRE)", "Shure Ceiling X4", "1Beyond Cams (x2) (6512862)", "5x 1Beyond", "N/A" ->
+     { text, name, qty, manufacturer, model } or null. Nothing is corrected or guessed: the manufacturer is taken only when
+     the text starts with a known name, and the rest is kept, as written, as the model. */
+  I.parseListing = function (text) {
+    const raw = String(text == null ? '' : text).replace(/\s+/g, ' ').trim();
+    if (!raw || /^(n\/?a|none|no|-+|tbd|tbc|unknown|\?+)$/i.test(raw)) return null;
+    let t = raw, qty = 1, m;
+    if ((m = /\(\s*x\s*(\d{1,2})\s*\)/i.exec(t))) { qty = parseInt(m[1], 10); t = (t.slice(0, m.index) + t.slice(m.index + m[0].length)).replace(/\s+/g, ' ').trim(); }
+    else if ((m = /(?:^|\s)x\s?(\d{1,2})$/i.exec(t))) { qty = parseInt(m[1], 10); t = t.slice(0, m.index).trim(); }
+    else if ((m = /^(\d{1,2})\s*x\s+/i.exec(t))) { qty = parseInt(m[1], 10); t = t.slice(m[0].length).trim(); }
+    qty = Math.max(1, Math.min(qty || 1, 24));
+    const names = I.manufacturers().slice().sort(function (a, b) { return b.length - a.length; });
+    let manufacturer = '', model = t;
+    for (let i = 0; i < names.length; i++) {
+      const n = names[i];
+      if (t.toLowerCase().indexOf(n.toLowerCase()) === 0 && (t.length === n.length || /[^A-Za-z]/.test(t.charAt(n.length)))) {
+        manufacturer = n; model = t.slice(n.length).replace(/^[\s,:\-]+/, '').trim(); break;
+      }
+    }
+    return { text: raw, name: t, qty: qty, manufacturer: manufacturer, model: model };
+  };
+  const compact = function (s) { return String(s || '').toLowerCase().replace(/\s+/g, ''); };
+  /* the equipment a room's details name: [{ listed_text, category, manufacturer, model, qty }] */
+  I.listing = function (room) {
+    const items = [], byText = new Map();
+    S.LISTING_FIELDS.forEach(function (f) {
+      const p = I.parseListing(room[f[0]]);
+      if (!p) return;
+      const k = compact(p.name);
+      const ex = byText.get(k);
+      /* the same equipment named for the camera and the microphones (a video bar) is one device */
+      if (ex && ((ex.fields.indexOf('camera_config') >= 0 && f[0] === 'microphone_config') || (ex.fields.indexOf('microphone_config') >= 0 && f[0] === 'camera_config'))) {
+        ex.fields.push(f[0]); ex.category = 'Room collaboration system'; ex.listed_text = 'Camera and microphone configuration: ' + ex.text; ex.qty = Math.max(ex.qty, p.qty); return;
+      }
+      const it = { fields: [f[0]], text: p.text, listed_text: f[1] + ': ' + p.text, category: f[2], manufacturer: p.manufacturer, model: p.model, qty: p.qty };
+      items.push(it); byText.set(k, it);
+    });
+    return items;
+  };
+  /* what would be created for a room: each listed item, less those already listed (including any since deleted, merged or not found) */
+  I.listingPlan = function (room) {
+    const have = store.raw('devices').filter(function (d) { return d.room_id === room.id && d.listed_text; });
+    return I.listing(room).map(function (it) {
+      const n = have.filter(function (d) { return compact(d.listed_text) === compact(it.listed_text); }).length;
+      return Object.assign({}, it, { existing: n, create: Math.max(0, it.qty - n) });
+    });
+  };
+  I.createListed = function (room) {
+    let made = 0;
+    I.listingPlan(room).forEach(function (it) {
+      for (let i = 0; i < it.create; i++) {
+        const values = { category: it.category, manufacturer: it.manufacturer, model: it.model, presence: 'listed', listed_text: it.listed_text };
+        const src = { category: 'import' }; if (it.manufacturer) src.manufacturer = 'import'; if (it.model) src.model = 'import';
+        I.create(room, values, src, { silent: true });
+        made++;
+      }
+    });
+    return made;
+  };
+  /* listed, looked for, not in the room: kept as history, out of the active inventory */
+  I.markNotFound = function (d, note) {
+    const text = 'Listed (' + (d.listed_text || 'room details') + ') but not found in the room on ' + U.fmtDate(U.now()) + (note ? ': ' + note : '') + '.';
+    store.update('devices', d.id, { presence: 'not_found', archived: true, notes: [d.notes, text].filter(Boolean).join('\n') });
   };
 
   /* ------------------------------------------------------------------ change history of one asset */

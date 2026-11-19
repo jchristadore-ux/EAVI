@@ -205,10 +205,30 @@
   };
 
   /* ------------------------------------------------------------------ captures */
-  ID.newCapture = function (room) {
-    return store.create('asset_identifications', { building_id: room.building_id, floor_id: room.floor_id, room_id: room.id, device_id: null, status: 'draft',
-      provider: '', model: '', requested_at: null, completed_at: null, result: null, error: '', selected_index: 0, draft: { values: {}, sources: {}, statuses: {} }, notes: '' });
+  /* target: an asset already in the inventory (listed from the room details) that this capture confirms */
+  function draftFrom(d) {
+    const values = {}, sources = {}, statuses = {}, src = I.sources(d);
+    I.SOURCED.forEach(function (k) { if (!U.blank(d[k])) { values[k] = d[k]; sources[k] = src[k] || 'existing'; } });
+    I.ID_FIELDS.forEach(function (f) { if (d[f.s] && d[f.s] !== 'unknown') statuses[f.s] = d[f.s]; });
+    return { values: values, sources: sources, statuses: statuses, suggest: {}, picked: {} };
+  }
+  ID.newCapture = function (room, target) {
+    return store.create('asset_identifications', { building_id: room.building_id, floor_id: room.floor_id, room_id: room.id, device_id: target ? target.id : null, status: 'draft',
+      provider: '', model: '', requested_at: null, completed_at: null, result: null, error: '', selected_index: 0,
+      draft: target ? draftFrom(target) : { values: {}, sources: {}, statuses: {} }, notes: '' });
   };
+  /* "this is one of the listed devices": the capture now confirms it; what the capture already holds stays */
+  ID.linkTarget = function (capId, deviceId) {
+    const cap = store.get('asset_identifications', capId), d = store.get('devices', deviceId);
+    if (!cap || !d) return;
+    const cur = cap.draft || { values: {}, sources: {}, statuses: {} }, from = draftFrom(d);
+    const next = { values: Object.assign({}, cur.values), sources: Object.assign({}, cur.sources), statuses: Object.assign({}, cur.statuses), suggest: cur.suggest || {}, picked: Object.assign({}, cur.picked || {}) };
+    Object.keys(from.values).forEach(function (k) { if (U.blank(next.values[k])) { next.values[k] = from.values[k]; next.sources[k] = from.sources[k]; } });
+    Object.keys(from.statuses).forEach(function (k) { if (!next.statuses[k]) next.statuses[k] = from.statuses[k]; });
+    store.update('asset_identifications', capId, { device_id: d.id, draft: next });
+  };
+  ID.unlinkTarget = function (capId) { store.update('asset_identifications', capId, { device_id: null }); };
+  ID.target = function (cap) { const d = cap && cap.device_id && cap.status !== 'confirmed' ? store.get('devices', cap.device_id) : null; return d || null; };
   ID.addPhotos = async function (cap, files, role) {
     const room = store.get('rooms', cap.room_id);
     const cat = (S.PHOTO_ROLES.find(function (r) { return r[0] === role; }) || S.PHOTO_ROLES[0])[2];
@@ -246,7 +266,11 @@
     /* an earlier AI value goes, unless the person chose it (tapped a suggestion or a label value) */
     Object.keys(out.values).forEach(function (k) { if (out.sources[k] === 'ai' && !out.picked[k]) { delete out.values[k]; delete out.sources[k]; } });
     Object.keys(fill.values).forEach(function (k) {
-      if (!U.blank(out.values[k])) return;
+      /* a field that already holds something keeps it; a different reading is offered to tap */
+      if (!U.blank(out.values[k])) {
+        if (String(out.values[k]).trim().toLowerCase() !== String(fill.values[k]).trim().toLowerCase()) out.suggest = Object.assign({}, out.suggest, (function () { const o = {}; o[k] = U.uniq([fill.values[k]].concat(out.suggest[k] || [])); return o; })());
+        return;
+      }
       const f = I.ID_FIELDS.find(function (x) { return x.k === k; });
       /* "not accessible" or "not applicable" was a person's answer */
       if (f && (out.statuses[f.s] === 'unavailable' || out.statuses[f.s] === 'not_applicable')) return;
@@ -301,6 +325,26 @@
     /* identity is confirmed only when there is one to confirm; a missing manufacturer or model already lists the asset
        as needing identification, and it stops doing so as soon as both are recorded */
     const identified = !U.blank(values.manufacturer) && !U.blank(values.model) && !U.blank(values.category);
+    const target = ID.target(cap);
+    if (target) {
+      /* confirming an asset already in the inventory: it is now seen; each changed value keeps its source */
+      const bySrc = {};
+      I.SOURCED.forEach(function (k) {
+        const v = d.values[k] == null ? '' : String(d.values[k]).trim();
+        if (v !== String(target[k] == null ? '' : target[k])) { const s = d.sources[k] || 'manual'; (bySrc[s] = bySrc[s] || {})[k] = k === 'mac_address' ? R.macFormat(v) : v; }
+      });
+      let cur = target;
+      Object.keys(bySrc).forEach(function (s) { cur = I.update(cur, bySrc[s], s) || cur; });
+      const st2 = { presence: '', ai_identification_id: cap.id, manual_review: !!opts.manualReview };
+      I.ID_FIELDS.forEach(function (f) { if (values[f.s] !== (cur[f.s] || 'unknown')) st2[f.s] = values[f.s]; if ((values[f.s] === 'verified_onsite' || values[f.s] === 'verified_mgmt')) st2.last_verified_at = U.now(); });
+      if (identified && !opts.manualReview) { st2.identity_confirmed_at = U.now(); st2.identity_confirmed_by = store.actor(); st2.last_verified_at = U.now(); }
+      cur = store.update('devices', cur.id, st2);
+      store.log({ action: 'updated', table: 'devices', rec: cur, summary: cur.code + ' seen in the room and confirmed' + (cur.listed_text ? ' (' + cur.listed_text + ')' : '') });
+      P.forIdentification(capId).forEach(function (p) { if (!p.device_id) store.update('photos', p.id, { device_id: cur.id }, { silent: true }); });
+      if (!room.inventory_status) store.update('rooms', room.id, { inventory_status: 'in_progress' }, { silent: true });
+      store.update('asset_identifications', capId, { status: 'confirmed', device_id: cur.id });
+      return cur;
+    }
     const dev = I.create(room, values, d.sources, { confirm: identified && !opts.manualReview, identification: cap, manualReview: !!opts.manualReview });
     P.forIdentification(capId).forEach(function (p) { if (!p.device_id) store.update('photos', p.id, { device_id: dev.id }, { silent: true }); });
     store.update('asset_identifications', capId, { status: 'confirmed', device_id: dev.id });
@@ -331,7 +375,7 @@
           e.target.value = '';
           if (!files.length) return undefined;
           let cap = o.capture ? o.capture() : null;
-          if (!cap) { const room = o.room(); if (!room) return undefined; cap = ID.newCapture(room); }
+          if (!cap) { const room = o.room(); if (!room) return undefined; cap = ID.newCapture(room, o.target ? o.target() : null); }
           if (o.started) o.started(cap);
           return ID.addPhotos(cap, files, o.role ? o.role() : 'front').then(function () { if (o.after) o.after(cap); });
         } }));
@@ -385,7 +429,7 @@
       const ask = missing.length ? ui.confirm({ title: 'Save without ' + missing.join(' and ') + '?', message: 'The device is saved to this room and listed as needing identification until the ' + missing.join(' and ') + ' are recorded.', confirm: 'Save' }) : Promise.resolve(true);
       return ask.then(function (ok) {
         if (!ok) return;
-        const cands = I.candidatesFor(d.values, st.roomId);
+        const cands = I.candidatesFor(d.values, st.roomId, c.device_id);
         let dev;
         try { dev = ID.confirm(st.capId); } catch (e) { EV.reportError(e, 'Not saved'); return; }
         st.done = dev.id;
@@ -396,7 +440,7 @@
     };
     const sheet = ui.openSheet({
       size: 'full',
-      title: function () { return st.done ? 'Device saved' : 'Identify device'; },
+      title: function () { return st.done ? 'Device saved' : ID.target(cap()) ? 'Confirm listed device' : 'Identify device'; },
       sub: function () { const r = room(); return r ? [R.roomLabel(r), (store.get('floors', r.floor_id) ? 'Floor ' + store.get('floors', r.floor_id).number : ''), (store.get('buildings', r.building_id) || {}).name].filter(Boolean).join(' · ') : ''; },
       render: function () {
         const r = room();
@@ -405,7 +449,7 @@
         const c = cap();
         if (c && !I.OPEN_IDENT[c.status]) return ui.empty({ icon: 'check-circle', title: c.status === 'confirmed' ? 'This capture was confirmed.' : 'This capture was discarded.',
           action: c.device_id ? ui.btn('Open the asset', { kind: 'primary', onclick: function () { ui.closeSheet(sheet); EV.assets.open(c.device_id); } }) : null });
-        return h('div.stack.stack-lg.ident', { key: 'cap' + st.n }, photoSection(c), aiSection(c), fieldsSection(c), dupSection(c));
+        return h('div.stack.stack-lg.ident', { key: 'cap' + st.n }, listedSection(c), photoSection(c), aiSection(c), fieldsSection(c), dupSection(c));
       },
       footer: function () {
         const c = cap();
@@ -583,9 +627,22 @@
           textField('asset_tag', 'Asset tag', { half: true, mono: true }),
           ui.field('Notes', ui.textarea(d.values.notes || '', { rows: 2, id: 'ident-notes', oninput: function (v) { set('notes', v); } }), { key: 'notes' })));
     }
+    /* the room's listed devices: this capture may be one of them */
+    function listedSection(c) {
+      const t = ID.target(c);
+      if (t) return ui.note('info', [h('span.mono', { key: 'c' }, t.code), ' · ' + (t.listed_text || R.deviceLabel(t))], { key: 'tgt', title: 'Confirming a listed device',
+        action: h('div.btn-row', null, ui.btn('Not this one', { sm: true, kind: 'ghost', onclick: function () { ID.unlinkTarget(c.id); } })) });
+      const listed = I.roomListed(st.roomId);
+      if (!listed.length) return null;
+      return h('section.stack', { key: 'listed' }, ui.label('Is it one of the listed devices?', h('span.count', null, String(listed.length))),
+        h('div.chip-scroll', null, listed.slice(0, 30).map(function (x) {
+          return h('button', { type: 'button', key: x.id, 'class': 'pill', onclick: function () { ensure(); ID.linkTarget(st.capId, x.id); } }, [x.manufacturer, x.model].filter(Boolean).join(' ') || x.listed_text || x.code);
+        })),
+        h('span.field-hint', null, 'Choosing one confirms that asset instead of adding a new one.'));
+    }
     function dupSection(c) {
       const d = draft();
-      const cands = I.candidatesFor(d.values, st.roomId);
+      const cands = I.candidatesFor(d.values, st.roomId, c && c.device_id);
       if (!cands.length) return null;
       const strong = cands.filter(function (e) { return e.strong; });
       return h('section.stack', { key: 'dup' }, ui.label('Possible duplicates', h('span.count', null, String(cands.length))),

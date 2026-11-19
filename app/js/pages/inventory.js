@@ -34,7 +34,7 @@
       shortcut('grid', 'Start Room Inventory', 'Building → floor → room', function () { EV.inventoryStart(); }, { primary: true, id: 'sc-start' }),
       shortcut('camera', 'Photograph Device', 'Camera first, then identify', function () { EV.identify.startAnywhere(); }, { id: 'sc-photo' }),
       shortcut('zap', 'Review Unidentified', m.awaiting ? m.awaiting + ' waiting' : 'Nothing waiting', function () { EV.go('/identify'); }, { id: 'sc-review' }),
-      shortcut('database', 'View All Assets', U.plural(m.assets, 'asset'), function () { EV.go('/assets'); }, { id: 'sc-assets' }),
+      shortcut('database', 'View All Assets', U.plural(m.captured, 'asset') + (m.listed ? ' · ' + m.listed + ' listed' : ''), function () { EV.go('/assets'); }, { id: 'sc-assets' }),
       shortcut('share', 'Export Inventory', m.ready ? m.ready + ' ready' : 'CSV · Excel · JSON', function () { EV.go('/integration'); }, { id: 'sc-export' }));
     if (!m.buildings) {
       return [head, shortcuts,
@@ -55,10 +55,10 @@
           ui.stat({ key: 'r', label: 'Rooms identified', value: m.rooms, sub: m.roomsInProgress + ' in progress', onclick: function () { EV.go('/rooms'); } }),
           ui.stat({ key: 'ri', label: 'Rooms inventoried', value: m.roomsComplete, unit: '/ ' + m.rooms, tone: m.rooms && m.roomsComplete === m.rooms ? 'ok' : null, onclick: function () { EV.go('/rooms'); } }),
           ui.stat({ key: 'u', label: 'Unique devices', value: m.unique, sub: m.duplicates ? m.duplicates + ' duplicate groups to resolve' : 'No shared identifiers', onclick: function () { EV.go('/assets'); } }),
-          ui.stat({ key: 'c', label: 'Devices captured', value: m.assets, sub: m.pending ? m.pending + ' captures not yet confirmed' : 'All captures confirmed', onclick: function () { EV.go('/assets'); } }),
+          ui.stat({ key: 'c', label: 'Devices captured', value: m.captured, sub: (m.listed ? m.listed + ' listed, not yet seen' : 'Nothing listed waiting') + (m.pending ? ' · ' + m.pending + ' captures to confirm' : ''), onclick: function () { EV.go(m.listed ? '/assets?filter=listed' : '/assets'); } }),
           ui.stat({ key: 'a', label: 'Awaiting identification', value: m.awaiting, tone: m.awaiting ? 'warn' : 'ok', sub: m.pending + ' captures · ' + m.needsId + ' assets', onclick: function () { EV.go('/identify'); } }),
           ui.stat({ key: 'i', label: 'Incomplete information', value: m.incomplete, tone: m.incomplete ? 'warn' : null, sub: 'Something not yet captured', onclick: function () { EV.go('/assets?filter=incomplete'); } }),
-          ui.stat({ key: 'v', label: 'Manually verified', value: m.verified, unit: '/ ' + m.assets, tone: m.assets && m.verified === m.assets ? 'ok' : null, onclick: function () { EV.go('/assets?filter=verified'); } }),
+          ui.stat({ key: 'v', label: 'Manually verified', value: m.verified, unit: '/ ' + m.captured, tone: m.captured && m.verified === m.captured ? 'ok' : null, onclick: function () { EV.go('/assets?filter=verified'); } }),
           ui.stat({ key: 'e', label: 'Ready for export', value: m.ready, sub: 'Verified, not yet exported as they are', onclick: function () { EV.go('/integration'); } }),
           ui.stat({ key: 'x', label: 'Already exported', value: m.exported, sub: m.changed ? m.changed + ' changed since export' : 'None changed since', onclick: function () { EV.go('/assets?filter=exported'); } }))),
       h('div.split', null,

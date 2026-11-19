@@ -8,10 +8,10 @@
   function statusChip(s) { return ui.chip(I.roomStatusLabel(s), I.ROOM_TONE[s]); }
   function roomRow(r, o) {
     o = o || {};
-    const s = I.roomStatus(r), n = I.roomAssets(r.id).length, pend = I.roomPending(r.id).length;
+    const s = I.roomStatus(r), n = I.roomAssets(r.id).length, pend = I.roomPending(r.id).length, lst = I.roomListed(r.id).length;
     const f = o.where ? store.get('floors', r.floor_id) : null, b = o.where ? store.get('buildings', r.building_id) : null;
     return ui.row({ key: r.id, left: icon('grid', 17), title: [R.roomLabel(r) || 'Unnamed room', ui.demo(r)],
-      sub: [o.where ? [b && b.name, f && 'Floor ' + f.number].filter(Boolean).join(' · ') : '', r.department, U.plural(n, 'device'), pend ? pend + ' awaiting review' : ''].filter(Boolean).join(' · '),
+      sub: [o.where ? [b && b.name, f && 'Floor ' + f.number].filter(Boolean).join(' · ') : '', r.department, U.plural(n, 'device'), lst ? lst + ' listed, not yet seen' : '', pend ? pend + ' awaiting review' : ''].filter(Boolean).join(' · '),
       right: statusChip(s), onclick: function () { EV.go('/rooms/room/' + r.id); } });
   }
   EV.inventoryRoomRow = roomRow;
@@ -24,6 +24,7 @@
     return [
       ui.head({ title: 'Room Inventory', sub: 'Choose a floor, then a room, and photograph each device',
         actions: [ui.btn('Import room list', { key: 'i', icon: 'upload', id: 'rooms-import', onclick: function () { EV.roomImport.open(); } }),
+          ui.btn('List equipment from room details', { key: 'l', icon: 'list', id: 'rooms-list-all', onclick: function () { EV.inventoryListAll(); } }),
           ui.btn('Photograph device', { key: 'p', kind: 'primary', icon: 'camera', onclick: function () { ID.startAnywhere(); } })] }),
       buildings.length ? ui.search(st.q, function (v) { st.q = v; }, 'Find a room: number, name or department') : null,
       found ? (found.length ? h('div.list', null, found.slice(0, 80).map(function (r) { return roomRow(r, { where: true }); })) : ui.empty({ icon: 'search', title: 'No room matches “' + st.q.trim() + '”' })) : null,
@@ -92,6 +93,50 @@
   function editRoom(room) {
     return ui.openEditor({ table: 'rooms', id: room.id, fields: S.F.inventoryRoom, title: 'Room details', sub: room.code, strict: false, size: 'auto', canDelete: false });
   }
+  /* every room's listed equipment (display, camera and microphone details) becomes listed assets, after a preview */
+  EV.inventoryListAll = function () {
+    const rooms = I.liveRooms();
+    const plans = rooms.map(function (r) { return { room: r, items: I.listingPlan(r) }; }).filter(function (x) { return x.items.length; });
+    const total = U.sum(plans, function (x) { return U.sum(x.items, function (i) { return i.create; }); });
+    const already = U.sum(plans, function (x) { return U.sum(x.items, function (i) { return Math.min(i.existing, i.qty); }); });
+    const sheet = ui.openSheet({
+      size: 'full', title: 'List equipment from room details', sub: 'Display, camera and microphone configuration of ' + U.plural(plans.length, 'room'),
+      render: function () {
+        return [
+          ui.note('info', 'Each item named in a room\'s details becomes an asset marked “Listed — not yet seen”, with the text exactly as recorded. The manufacturer is taken only when the text starts with a known name; the rest is kept as the model. Nothing else is filled in: in the room, each one is confirmed by photographing it, or marked as not found.', { key: 'n' }),
+          h('div.tiles.tiles-3', { key: 't' }, ui.stat({ key: 'a', label: 'Devices to list', value: total, tone: total ? 'ok' : null }), ui.stat({ key: 'b', label: 'Already listed', value: already }), ui.stat({ key: 'c', label: 'Rooms with details', value: plans.length })),
+          plans.length ? h('div.list', { key: 'l' }, plans.slice(0, 150).map(function (x) {
+            return h('div.row', { key: x.room.id }, h('span.row-main', null, h('span.row-title', null, R.roomLabel(x.room)),
+              x.items.map(function (i, k) { return h('span.row-sub', { key: 'i' + k }, (i.create ? (i.qty > 1 ? i.create + ' × ' : '') : 'Already listed: ') + i.category + ' — ' + i.text); })));
+          })) : ui.empty({ key: 'e', icon: 'list', title: 'No room has equipment in its details' })
+        ];
+      },
+      footer: function () {
+        return [h('span.grow', { key: 'g' }), ui.btn('Cancel', { kind: 'ghost', key: 'c', onclick: function () { ui.closeSheet(sheet); } }),
+          ui.btn('List ' + U.plural(total, 'device'), { kind: 'primary', key: 'go', icon: 'check', id: 'list-all-go', disabled: !total || store.readOnly, onclick: function () {
+            let made = 0;
+            plans.forEach(function (x) { made += I.createListed(x.room); });
+            store.log({ action: 'imported', entity_type: 'devices', summary: 'Listed ' + U.plural(made, 'device') + ' from the room details of ' + U.plural(plans.length, 'room') });
+            ui.closeSheet(sheet); EV.toast(U.plural(made, 'device') + ' listed', 'ok');
+          } })];
+      }
+    });
+    return sheet;
+  };
+  function listedRow(room, d) {
+    return h('div.row.listed-row', { key: d.id },
+      h('span.row-left', null, icon('list', 17)),
+      h('span.row-main', null, h('span.row-title', null, [d.manufacturer, d.model].filter(Boolean).join(' ') || d.listed_text || d.code),
+        h('span.row-sub', null, [R.deviceType(d), d.code, d.listed_text].filter(Boolean).join(' · ')),
+        store.readOnly ? null : h('span.btn-row.wrap', null,
+          ID.captureButton({ key: 'found-' + d.id, sm: true, label: 'Found — photograph', room: function () { return store.get('rooms', room.id); }, target: function () { return store.get('devices', d.id); },
+            after: function (cap) { ID.open({ capture: cap.id }); } }),
+          ui.btn('Confirm without photo', { sm: true, kind: 'ghost', onclick: function () { ID.open({ capture: ID.newCapture(room, d).id }); } }),
+          ui.btn('Not in this room', { sm: true, kind: 'ghost', onclick: function () {
+            return ui.confirm({ title: 'Not in this room?', message: d.code + ' (' + (d.listed_text || R.deviceLabel(d)) + ') is recorded as listed but not found, and leaves the active inventory. Its record and history are kept.', confirm: 'Not found' })
+              .then(function (ok) { if (ok) { I.markNotFound(store.get('devices', d.id)); EV.toast('Recorded as not found'); } });
+          } }))));
+  }
   EV.pages.roomsRoom = function (r) {
     const room = store.get('rooms', r.id);
     if (!room) return [ui.head({ title: 'Room not found', back: '/rooms' }), ui.empty({ icon: 'grid', title: 'This room no longer exists.' })];
@@ -100,6 +145,8 @@
     const s = I.roomStatus(room);
     const devs = U.sortBy(I.roomAssets(room.id), function (d) { return d.created_at; });
     const pend = I.roomPending(room.id);
+    const listed = I.roomListed(room.id);
+    const toList = I.listingPlan(room).filter(function (i) { return i.create; });
     const nx = nextRoom(room);
     const last = I.roomLastDate(room);
     return [
@@ -112,6 +159,12 @@
         h('div.btn-row.wrap', null,
           ID.captureButton({ key: 'room-up-' + room.id, library: true, kind: 'secondary', label: 'Upload photographs', room: function () { return store.get('rooms', room.id); }, after: function (cap) { ID.open({ capture: cap.id }); } }),
           ui.btn('Enter manually', { icon: 'edit', id: 'room-manual', onclick: function () { ID.open({ room: room }); } }))),
+      toList.length && !store.readOnly ? ui.note('info', 'The room details name equipment that is not in the inventory yet: ' + toList.map(function (i) { return (i.create > 1 ? i.create + ' × ' : '') + i.text; }).join('; ') + '.',
+        { key: 'tolist', title: 'Listed in the room details', action: h('div.btn-row', null, ui.btn('Add as listed devices', { sm: true, kind: 'primary', icon: 'list', id: 'room-list-go', onclick: function () { const n = I.createListed(room); EV.toast(U.plural(n, 'device') + ' listed', 'ok'); } })) }) : null,
+      listed.length ? h('section.stack', null,
+        ui.label('Listed — not yet seen', h('span.count', null, String(listed.length))),
+        h('p.muted', null, 'Known from the room details. Photograph each one to confirm it, or mark it as not in the room.'),
+        h('div.list', null, listed.map(function (d) { return listedRow(room, d); }))) : null,
       pend.length ? h('section.stack', null,
         ui.label('Awaiting review', h('span.count', null, String(pend.length))),
         h('div.list', null, pend.map(function (c) { return EV.captureRow(c); }))) : null,
@@ -132,7 +185,8 @@
         s === 'complete'
           ? ui.btn('Reopen room inventory', { icon: 'undo', id: 'room-reopen', onclick: function () { store.update('rooms', room.id, { inventory_status: 'in_progress', inventory_completed_at: null, inventory_completed_by: '' }); } })
           : ui.btn('Mark room inventory complete', { kind: 'primary', icon: 'check', id: 'room-complete', onclick: function () {
-            const ask = pend.length ? ui.confirm({ title: 'Mark complete with captures still to review?', message: U.plural(pend.length, 'capture') + ' in this room are not yet confirmed. They stay under Identify Devices.', confirm: 'Mark complete' }) : Promise.resolve(true);
+            const open = [pend.length ? U.plural(pend.length, 'capture') + ' not yet confirmed (they stay under Identify Devices)' : '', listed.length ? U.plural(listed.length, 'listed device') + ' neither seen nor marked not found' : ''].filter(Boolean);
+            const ask = open.length ? ui.confirm({ title: 'Mark complete with work still open?', message: 'This room has ' + open.join(' and ') + '.', confirm: 'Mark complete' }) : Promise.resolve(true);
             return ask.then(function (ok) {
               if (!ok) return;
               store.update('rooms', room.id, { inventory_status: 'complete', inventory_completed_at: U.now(), inventory_completed_by: store.actor() });

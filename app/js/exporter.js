@@ -37,7 +37,7 @@
   const SKIP_TABLES = { organizations: 1, profiles: 1, insight_states: 1, exports: 1, asset_identifications: 1, asset_taxonomy: 1, export_profiles: 1, asset_exports: 1 };
   const INVENTORY_ONLY = { rooms: { department: 0, inventory_status: 1, inventory_completed_at: 1, inventory_completed_by: 1 },
     devices: { identity_confirmed_at: 1, identity_confirmed_by: 1, field_sources: 1, manual_review: 1, last_verified_at: 1, ai_identification_id: 1, merged_into: 1,
-      distinct_from: 1, exported_at: 1, export_code: 1, export_sig: 1 },
+      distinct_from: 1, exported_at: 1, export_code: 1, export_sig: 1, presence: 1, listed_text: 1 },
     photos: { identification_id: 1, phash: 1, crop_of: 1 } };
 
   /* ------------------------------------------------------------------ column mapping */
@@ -350,6 +350,8 @@
           const hit = inWin(r.created_at) || inWin(r.updated_at) || (table === 'audits' && dateInWin(r.audit_date));
           if (!hit) return;
         }
+        /* a device known only from the room details (not yet seen) belongs to the asset inventory's own export */
+        if (table === 'devices' && r.presence === 'listed') return;
         if (!passes(table, r)) return;
         /* A date-based or full export shows each audit, device and backlog item with everything that belongs to it.
            "Since last export" stays minimal: the changed rows plus the records they refer to. */

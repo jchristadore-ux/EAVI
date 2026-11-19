@@ -2326,6 +2326,51 @@
     EV.go('/'); await wait(50);
   });
 
+  test('equipment listed in the room details becomes listed assets: parsed without guessing, counted once, confirmed in the room by a capture or recorded as not found, and kept out of the audit screens until seen', async function () {
+    const p = function (t) { return I.parseListing(t); };
+    eq([p('N/A'), p(''), p('none')], [null, null, null]);
+    eq(p('Samsung QM55R (LH55QMRE)'), { text: 'Samsung QM55R (LH55QMRE)', name: 'Samsung QM55R (LH55QMRE)', qty: 1, manufacturer: 'Samsung', model: 'QM55R (LH55QMRE)' });
+    eq([p('Shure Ceiling X4').qty, p('Shure Ceiling X4').model, p('1Beyond Cams (x2) (6512862)').qty, p('1Beyond Cams (x2) (6512862)').model, p('5x 1Beyond').qty, p('5x 1Beyond').model],
+      [4, 'Ceiling', 2, 'Cams (6512862)', 5, '']);
+    eq([p('Creston Wall Plate').manufacturer, p('SamsungN/A').manufacturer, p('Polycom Mptz-11').manufacturer], ['', '', 'Polycom'], 'a misspelt or run-together name is not corrected');
+    const room = invRoom('I-8');
+    store.update('rooms', room.id, { display_config: 'Samsung QM65R (LH65QMRE)', camera_config: 'Neat Bar (NEATBAR-SE)', microphone_config: 'Neat Bar (NEATBAR-SE)' });
+    const r2 = invRoom('I-9');
+    store.update('rooms', r2.id, { display_config: 'Video Wall', camera_config: 'Crestron IV-CAM-I20-B', microphone_config: 'Shure Ceiling X4' });
+    const plan = I.listingPlan(store.get('rooms', room.id));
+    eq(plan.map(function (i) { return [i.category, i.manufacturer, i.qty, i.create]; }), [['Display', 'Samsung', 1, 1], ['Room collaboration system', 'Neat', 1, 1]], 'a bar named for camera and microphones is one device');
+    eq([I.createListed(store.get('rooms', room.id)), I.createListed(store.get('rooms', room.id)), I.createListed(store.get('rooms', r2.id))], [2, 0, 6], 'listing twice adds nothing; four ceiling microphones are four devices');
+    const listed = I.roomListed(room.id);
+    eq([listed.length, I.asset(listed[0]).status, listed[0].field_sources.category, I.roomStatus(store.get('rooms', room.id)), R.roomDevices(room.id).length],
+      [2, 'listed', 'import', '', 0], 'listed devices do not start the room and are not in the audit screens');
+    eq(I.duplicates().possible.filter(function (g) { return g.devices.some(function (d) { return d.room_id === r2.id; }); }).length, 0, 'four listed microphones are not a duplicate question');
+    R.reconcileFollowups();
+    eq(store.all('followups').filter(function (f) { return listed.some(function (d) { return d.id === f.device_id; }) && f.status === 'open'; }).length, 0, 'no follow-up task for a device nobody has seen');
+    assert(EV.assets.matches(listed[0], 'listed') && !EV.assets.matches(listed[0], 'missing_serial'), 'listed devices are their own filter, not gaps');
+    /* confirmed in the room: the same asset, now seen, values with their sources */
+    const display = listed.find(function (d) { return d.category === 'Display'; });
+    const cap = ID.newCapture(store.get('rooms', room.id), display);
+    eq([cap.device_id, cap.draft.values.manufacturer, cap.draft.sources.manufacturer], [display.id, 'Samsung', 'import']);
+    await ID.addPhotos(cap, [await imageFile('display')], 'label');
+    ID.setValue(cap.id, 'model', 'LH65QMRE'); ID.setValue(cap.id, 'serial_number', 'SER-65');
+    const before = store.all('devices').length;
+    const seen = ID.confirm(cap.id);
+    eq([store.all('devices').length, seen.id, seen.presence, seen.model, seen.field_sources.model, seen.field_sources.manufacturer, !!seen.identity_confirmed_at, EV.photos.forDevice(seen.id).length, I.roomStatus(store.get('rooms', room.id))],
+      [before, display.id, '', 'LH65QMRE', 'manual', 'import', true, 1, 'in_progress']);
+    /* a new capture can be linked to a listed device; one not there is recorded as not found */
+    const bar = I.roomListed(room.id)[0];
+    const cap2 = ID.newCapture(store.get('rooms', room.id));
+    ID.setValue(cap2.id, 'serial_number', 'NB-1');
+    ID.linkTarget(cap2.id, bar.id);
+    eq([store.get('asset_identifications', cap2.id).draft.values.manufacturer, store.get('asset_identifications', cap2.id).draft.values.serial_number], ['Neat', 'NB-1']);
+    eq(ID.confirm(cap2.id).id, bar.id);
+    const mic = I.roomListed(r2.id).find(function (d) { return d.manufacturer === 'Shure'; });
+    I.markNotFound(mic);
+    const gone = store.getAny('devices', mic.id);
+    eq([gone.presence, gone.archived, /not found/.test(gone.notes), I.roomListed(r2.id).length, I.createListed(store.get('rooms', r2.id))], ['not_found', true, true, 5, 0], 'and it is not listed again');
+    eq(I.metrics().listed >= 5, true);
+  });
+
   /* ------------------------------------------------------------------ runner */
   function render() {
     const ol = document.getElementById('results');
