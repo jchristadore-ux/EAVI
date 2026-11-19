@@ -43,7 +43,7 @@
       if (st.filter !== 'archived' && !AS.matches(d, st.filter)) return false;
       if (!q) return true;
       const room = store.get('rooms', d.room_id);
-      return [d.code, d.manufacturer, d.make, d.model, d.product_family, d.serial_number, d.mac_address, d.ip_address, d.hostname, d.asset_tag, R.deviceType(d),
+      return [d.code, d.manufacturer, d.model, d.serial_number, d.mac_address, d.ip_address, R.deviceType(d),
         room ? room.number + ' ' + room.name + ' ' + (room.department || '') : ''].some(function (v) { return v && String(v).toLowerCase().indexOf(q) >= 0; });
     }), function (d) { const r = store.get('rooms', d.room_id), f = store.get('floors', d.floor_id); return (f ? U.pad(f.sort_order != null ? f.sort_order : 999, 6) : 'zzz') + ' ' + (r ? r.number : 'zzz') + ' ' + d.code; });
   }
@@ -200,7 +200,7 @@
   }
   function duplicatesView(dup) {
     return h('section.stack.stack-lg', null,
-      h('p.muted', null, 'Nothing is merged automatically. Records that share a serial number, MAC address or asset tag are most likely the same device photographed twice; the same model in the same room is often several identical devices.'),
+      h('p.muted', null, 'Nothing is merged automatically. Records that share a serial number or MAC address are most likely the same device photographed twice; the same model in the same room is often several identical devices.'),
       dup.strong.length ? h('div.stack', null, ui.label('Same identifier', h('span.count', null, String(dup.strong.length))), dup.strong.map(function (g) { return groupCard(g, 'strong'); })) : null,
       dup.photo.length ? h('div.stack', null, ui.label('Nearly identical photographs', h('span.count', null, String(dup.photo.length))), dup.photo.map(function (g) { return groupCard(g, 'photo'); })) : null,
       dup.possible.length ? h('div.stack', null, ui.label('Same model in the same room', h('span.count', null, String(dup.possible.length))), dup.possible.map(function (g) { return groupCard(g, 'possible'); })) : null,
@@ -290,7 +290,7 @@
       !res ? h('p.muted', null, 'No AI identification was run for this capture; the values were entered by a person.')
         : !dev ? h('p.muted', null, 'The AI did not identify a device in the photographs.')
           : h('div.kv-list', null,
-            [['Manufacturer', dev.manufacturer], ['Make', dev.make], ['Model', dev.model], ['Product family', dev.product_family], ['Category', dev.category], ['Function', dev['function']]].map(function (x) {
+            [['Manufacturer', dev.manufacturer], ['Model', dev.model], ['Category', dev.category]].map(function (x) {
               return ui.kv(x[0], x[1].value ? x[1].value + ' (' + (x[1].confidence || '') + ', ' + String(x[1].evidence || '').replace('_', ' ') + ')' : '', { key: x[0] });
             }),
             [['Serial number', dev.serial_number], ['MAC address', dev.mac_address], ['IP address', dev.ip_address]].map(function (x) { return ui.kv(x[0], x[1].value || 'Not visible', { mono: true, key: x[0] }); }),
@@ -340,12 +340,10 @@
             h('div.form-grid', null,
               ui.field(h('span', null, 'Device category', ' ', srcChip(d, 'category')), ui.select(d.category || '', I.categoryOptions(d.category), { id: 'as-category', disabled: store.readOnly, placeholder: 'Choose…', onchange: function (v) { I.update(store.get('devices', d.id), { category: v }); } }), { key: 'category', div: true }),
               textRow(d, 'manufacturer', 'Manufacturer', { half: true, list: I.manufacturers() }), textRow(d, 'model', 'Model', { half: true, mono: true }),
-              textRow(d, 'make', 'Make / brand', { half: true }), textRow(d, 'product_family', 'Product family', { half: true }), textRow(d, 'role', 'Function'),
               ui.field('Needs manual review', ui.toggle(!!d.manual_review, { disabled: store.readOnly, onchange: function (on) { store.update('devices', d.id, { manual_review: on }); } }), { div: true, cls: 'field-toggle', key: 'mr', hint: 'Keeps the asset listed as needing identification, whatever has been recorded.' }))),
           h('div.form-group', null,
             h('div.form-group-title', null, 'Identifiers'),
-            h('div.form-grid', null, ['serial_number', 'mac_address', 'ip_address'].map(function (k) { return idRow(d, I.ID_FIELDS.find(function (f) { return f.k === k; })); })),
-            h('div.form-grid', null, textRow(d, 'hostname', 'Hostname / device name', { half: true, mono: true }), textRow(d, 'asset_tag', 'Asset tag', { half: true, mono: true }))),
+            h('div.form-grid', null, ['serial_number', 'mac_address', 'ip_address'].map(function (k) { return idRow(d, I.ID_FIELDS.find(function (f) { return f.k === k; })); }))),
           h('div.form-group', null,
             h('div.form-group-title', null, 'Location and notes'),
             h('div.kv-list', null, ui.kv('Room', room ? R.roomLabel(room) + (room.department ? ' · ' + room.department : '') : 'No room'), ui.kv('Captured', U.fmtDateTime(d.created_at) + (d.created_by ? ' · ' + d.created_by : '')),

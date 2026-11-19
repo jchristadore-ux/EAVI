@@ -28,18 +28,13 @@
     ['department', 'Department / business unit', function (d) { return rm(d).department; }],
     ['category', 'Device category', function (d) { return R.deviceType(d); }],
     ['manufacturer', 'Manufacturer', function (d) { return d.manufacturer; }],
-    ['make', 'Make / brand', function (d) { return d.make; }],
     ['model', 'Model', function (d) { return d.model; }],
-    ['product_family', 'Product family', function (d) { return d.product_family; }],
-    ['function', 'Function', function (d) { return d.role; }],
     ['serial_number', 'Serial number', function (d) { return d.serial_number; }],
     ['serial_status', 'Serial number status', function (d) { return stLabel(d.serial_status); }],
     ['mac_address', 'MAC address', function (d) { return d.mac_address; }],
     ['mac_status', 'MAC address status', function (d) { return stLabel(d.mac_status); }],
     ['ip_address', 'IP address', function (d) { return d.ip_address; }],
     ['ip_status', 'IP address status', function (d) { return stLabel(d.ip_status); }],
-    ['hostname', 'Hostname', function (d) { return d.hostname; }],
-    ['asset_tag', 'Asset tag', function (d) { return d.asset_tag; }],
     ['firmware_version', 'Firmware version', function (d) { return d.firmware_version; }],
     ['primary_photo', 'Primary photograph (photo ID)', function (d) { const p = P.forDevice(d.id); return p.length ? p[p.length - 1].code : ''; }],
     ['photo_count', 'Number of photographs', function (d) { return P.forDevice(d.id).length; }],
@@ -64,8 +59,8 @@
   };
 
   /* ------------------------------------------------------------------ mappings */
-  const STANDARD = ['asset_id', 'building', 'floor', 'room_number', 'room_name', 'department', 'category', 'manufacturer', 'make', 'model', 'product_family', 'serial_number',
-    'mac_address', 'ip_address', 'hostname', 'asset_tag', 'primary_photo', 'identification_source', 'verification_status', 'date_captured', 'last_verified', 'notes'];
+  const STANDARD = ['asset_id', 'building', 'floor', 'room_number', 'room_name', 'department', 'category', 'manufacturer', 'model', 'serial_number',
+    'mac_address', 'ip_address', 'primary_photo', 'identification_source', 'verification_status', 'date_captured', 'last_verified', 'notes'];
   XA.standard = function () {
     return { id: 'standard', name: 'Standard asset export', target_system: 'Any system (this application\'s own field names)', format: 'csv', builtIn: true,
       mapping: STANDARD.map(function (k) { return { target: SRC.get(k)[1], source: k, required: k === 'asset_id' || k === 'building' || k === 'category' }; }), options: {} };
@@ -79,10 +74,10 @@
     ['building_address', ['address']], ['floor', ['floor', 'level']], ['room_number', ['room number', 'room no', 'room #', 'room']], ['room_name', ['room name', 'space name', 'space']],
     ['location', ['location', 'room location']], ['department', ['department', 'business unit', 'division', 'bu']],
     ['category', ['device type', 'type', 'category', 'device category', 'class', 'asset type']], ['manufacturer', ['manufacturer', 'vendor', 'mfr', 'mfg', 'oem']],
-    ['make', ['make', 'brand']], ['model', ['model', 'product model', 'model number', 'part number', 'product']], ['product_family', ['family', 'product family', 'series', 'product line']],
-    ['function', ['function', 'role', 'description', 'purpose']], ['serial_number', ['serial', 'serial number', 'serial no', 'sn', 's/n']],
+    ['model', ['model', 'product model', 'model number', 'part number', 'product']],
+    ['serial_number', ['serial', 'serial number', 'serial no', 'sn', 's/n']],
     ['mac_address', ['mac', 'mac address', 'hardware address', 'ethernet address']], ['ip_address', ['ip', 'ip address', 'management ip', 'mgmt ip', 'address ip', 'ipv4']],
-    ['hostname', ['hostname', 'host name', 'device name', 'name', 'dns name']], ['asset_tag', ['asset tag', 'tag', 'inventory tag', 'property tag']],
+    
     ['firmware_version', ['firmware', 'firmware version', 'version']], ['notes', ['notes', 'comments', 'remarks']], ['date_captured', ['date captured', 'created', 'discovered', 'install date']],
     ['last_verified', ['last verified', 'verified on', 'last seen']], ['verification_status', ['status', 'verification', 'verification status']]
   ];
@@ -152,7 +147,7 @@
       if (!U.blank(d.ip_address) && !R.ipValid(d.ip_address)) v.invalid.push(d.code + ': IP address “' + d.ip_address + '”');
       if (I.asset(d).status !== 'verified') v.unverified++;
     });
-    [['serial_number', 'serial number'], ['mac_address', 'MAC address'], ['asset_tag', 'asset tag']].forEach(function (p) {
+    [['serial_number', 'serial number'], ['mac_address', 'MAC address']].forEach(function (p) {
       U.groupBy(col.assets.filter(function (d) { return I.norm[p[0]](d[p[0]]); }), function (d) { return I.norm[p[0]](d[p[0]]); }).forEach(function (list, val) {
         if (list.length > 1) v.duplicates.push('Same ' + p[1] + ' ' + val + ': ' + list.map(function (d) { return d.code; }).join(', '));
       });

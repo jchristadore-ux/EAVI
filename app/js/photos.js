@@ -188,7 +188,7 @@
   /* A <label> bound to a hidden file input: one tap opens the phone camera natively (no scripted click needed). */
   P.captureLabel = function (o, children) {
     const id = 'cap-' + o.key;
-    return h('label', { 'class': U.cx(o.cls, 'capture'), 'for': id, key: o.key, role: 'button', title: o.title },
+    return h('label', { 'class': U.cx(o.cls, 'capture'), 'for': id, key: o.key, role: 'button', title: o.title, id: o.id },
       children,
       h('input', { id: id, type: 'file', accept: 'image/*', capture: o.library ? null : 'environment', multiple: !!o.library, 'class': 'file-input', tabindex: '-1',
         onchange: function (e) {

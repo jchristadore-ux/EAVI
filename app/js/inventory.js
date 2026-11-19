@@ -55,10 +55,9 @@
   };
   /* The fields an asset record is made of, in the order the screens show them. */
   I.FIELDS = [
-    { k: 'category', label: 'Device category' }, { k: 'manufacturer', label: 'Manufacturer' }, { k: 'make', label: 'Make / brand' },
-    { k: 'model', label: 'Model' }, { k: 'product_family', label: 'Product family' }, { k: 'role', label: 'Function' },
+    { k: 'category', label: 'Device category' }, { k: 'manufacturer', label: 'Manufacturer' }, { k: 'model', label: 'Model' },
     { k: 'serial_number', label: 'Serial number', id: true }, { k: 'mac_address', label: 'MAC address', id: true }, { k: 'ip_address', label: 'IP address', id: true },
-    { k: 'hostname', label: 'Hostname' }, { k: 'asset_tag', label: 'Asset tag' }, { k: 'notes', label: 'Notes' }
+    { k: 'notes', label: 'Notes' }
   ];
   I.SOURCED = I.FIELDS.map(function (f) { return f.k; });
   /* where each value came from; a value recorded before the inventory existed is an "existing record" */
@@ -187,7 +186,7 @@
     const dup = I.duplicates();
     m.duplicates = dup.strong.length;
     m.possible = dup.possible.length + dup.photo.length;
-    /* "unique" = captured records less the extra records in each group that shares a serial number, MAC address or asset tag */
+    /* "unique" = captured records less the extra records in each group that shares a serial number or MAC address */
     const extra = new Set();
     dup.strong.forEach(function (g) { g.devices.slice(1).forEach(function (d) { extra.add(d.id); }); });
     m.unique = assets.length - m.listed - extra.size;
@@ -224,7 +223,7 @@
     asset_tag: function (v) { return String(v || '').replace(/\s+/g, '').toUpperCase(); },
     code: function (v) { return String(v || '').trim().toUpperCase(); }
   };
-  const STRONG = [['serial_number', 'Serial number'], ['mac_address', 'MAC address'], ['asset_tag', 'Asset tag']];
+  const STRONG = [['serial_number', 'Serial number'], ['mac_address', 'MAC address']];
   function distinct(a, b) {
     return (Array.isArray(a.distinct_from) && a.distinct_from.indexOf(b.id) >= 0) || (Array.isArray(b.distinct_from) && b.distinct_from.indexOf(a.id) >= 0);
   }
@@ -299,8 +298,6 @@
       if (!v) return;
       assets.forEach(function (d) { if (I.norm[p[0]](d[p[0]]) === v) add(d, 'Same ' + p[1].toLowerCase() + ' (' + values[p[0]] + ')', true); });
     });
-    const code = I.norm.code(values.asset_tag);
-    if (code) assets.forEach(function (d) { if (I.norm.code(d.code) === code) add(d, 'The asset tag is this asset\'s ID', true); });
     if (roomId && !U.blank(values.manufacturer) && !U.blank(values.model)) {
       const mf = String(values.manufacturer).trim().toLowerCase(), md = String(values.model).trim().toLowerCase();
       assets.forEach(function (d) { if (d.room_id === roomId && String(d.manufacturer || '').trim().toLowerCase() === mf && String(d.model || '').trim().toLowerCase() === md) add(d, 'Same manufacturer and model in this room', false); });

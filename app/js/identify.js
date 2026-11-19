@@ -134,7 +134,7 @@
       if (f.confidence === 'confirmed' || f.confidence === 'probable') { values[k] = f.value; sources[k] = 'ai'; }
       else (suggest[k] = suggest[k] || []).push(f.value);
     };
-    take('manufacturer', dev.manufacturer); take('make', dev.make); take('product_family', dev.product_family); take('category', dev.category); take('role', dev['function']);
+    take('manufacturer', dev.manufacturer); take('category', dev.category);
     if (dev.model.value && (dev.model.confidence === 'confirmed' || (dev.model.confidence === 'probable' && !dev.model.alternatives.length))) { values.model = dev.model.value; sources.model = 'ai'; }
     else if (dev.model.value) suggest.model = [dev.model.value];
     if (dev.model.alternatives.length) suggest.model = U.uniq((suggest.model || []).concat(dev.model.alternatives));
@@ -522,7 +522,7 @@
             h('span.row-right.btn-row.wrap', null,
               ui.btn('Serial', { sm: true, kind: 'ghost', onclick: function () { set('serial_number', v, 'label'); } }),
               R.macValid(mac) ? ui.btn('MAC', { sm: true, kind: 'ghost', onclick: function () { set('mac_address', mac, 'label'); } }) : null,
-              ui.btn('Asset tag', { sm: true, kind: 'ghost', onclick: function () { set('asset_tag', v, 'label'); } })));
+              null));
         })),
         ui.btn('Close', { sm: true, kind: 'ghost', onclick: function () { st.codes = null; } }));
     }
@@ -558,7 +558,7 @@
         })) : null,
         res.devices.length > 1 ? h('p.muted', null, 'Each device is saved on its own: confirm this one, then “Photograph next device” — or crop a photograph to one device and identify again.') : null,
         dev ? h('div.kv-list', null,
-          [['Manufacturer', dev.manufacturer], ['Make', dev.make], ['Model', dev.model], ['Product family', dev.product_family], ['Category', dev.category], ['Function', dev['function']]].map(function (x) {
+          [['Manufacturer', dev.manufacturer], ['Model', dev.model], ['Category', dev.category]].map(function (x) {
             return h('div.kv', { key: x[0] }, h('span.kv-k', null, x[0]), h('span.kv-v', null, x[1].value || h('span.muted', null, 'Not identified'), ' ', confChip(x[1])));
           }),
           [['Serial number', dev.serial_number], ['MAC address', dev.mac_address], ['IP address', dev.ip_address]].map(function (x) {
@@ -569,9 +569,7 @@
         dev && dev.model.alternatives.length ? ui.note('warn', 'Similar models: ' + [dev.model.value].concat(dev.model.alternatives).filter(Boolean).join(', ') + '. Check the label and choose the model below.', { title: 'Model not certain' }) : null,
         dev && dev.other_identifiers.length ? h('div.stack', { style: 'gap:6px' }, h('span.field-label', null, 'Other text on the labels'),
           h('div.list', null, dev.other_identifiers.map(function (x, k) {
-            return h('div.row', { key: 'o' + k }, h('span.row-main', null, h('span.row-title', null, h('span.mono', null, x.value)), h('span.row-sub', null, x.label || 'Label text')),
-              h('span.row-right.btn-row', null, ui.btn('Asset tag', { sm: true, kind: 'ghost', onclick: function () { set('asset_tag', x.value, 'ai', true); } }),
-                ui.btn('Hostname', { sm: true, kind: 'ghost', onclick: function () { set('hostname', x.value, 'ai', true); } })));
+            return h('div.row', { key: 'o' + k }, h('span.row-main', null, h('span.row-title', null, h('span.mono', null, x.value)), h('span.row-sub', null, x.label || 'Label text')));
           }))) : null,
         dev && (dev.needs_manual_review || dev.review_reasons.length) ? ui.note('warn', dev.review_reasons.length ? dev.review_reasons.join(' ') : 'The AI is not certain of this identification.', { title: 'Check before confirming' }) : null,
         res.notes ? h('p.muted', null, res.notes) : null,
@@ -617,14 +615,10 @@
             { key: 'category', div: true }),
           textField('manufacturer', 'Manufacturer', { half: true, list: I.manufacturers() }),
           textField('model', 'Model', { half: true, mono: true }),
-          textField('make', 'Make / brand', { half: true }),
-          textField('product_family', 'Product family', { half: true }),
-          textField('role', 'Function', { ph: 'e.g. Room DSP; transmitter behind the display' })),
+          null),
         h('div.form-grid', null, I.ID_FIELDS.slice().sort(function (a, b) { return ['serial_number', 'mac_address', 'ip_address'].indexOf(a.k) - ['serial_number', 'mac_address', 'ip_address'].indexOf(b.k); }).map(idField)),
         problems.length ? ui.note('warn', problems.join(' ')) : null,
         h('div.form-grid', null,
-          textField('hostname', 'Hostname / device name', { half: true, mono: true }),
-          textField('asset_tag', 'Asset tag', { half: true, mono: true }),
           ui.field('Notes', ui.textarea(d.values.notes || '', { rows: 2, id: 'ident-notes', oninput: function (v) { set('notes', v); } }), { key: 'notes' })));
     }
     /* the room's listed devices: this capture may be one of them */

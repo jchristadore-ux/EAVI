@@ -19,7 +19,9 @@ against a stand-in service; the server function is written but has not been depl
    editable; uncertain values are offered as suggestions to tap, never filled in.
 4. Check the values. For each identifier choose its status: captured, verified, *not accessible*, or *not applicable*.
 5. **Confirm & save**. The device is now an asset of that room. **Photograph next device** opens the camera again.
-6. When the room is done: **Mark room inventory complete**, then **Next room**.
+6. **Photograph the room** (on the room page) for a wide view of the room itself; these photographs belong to the
+   room, not to a device.
+7. When the room is done: **Mark room inventory complete**, then **Next room**.
 
 Without AI the same screen is used to type the details, with the photographs beside the fields. *Save for later*
 keeps a capture under **Identify Devices** until someone reviews it. On Android Chrome, *Read barcode* offers each
@@ -58,9 +60,9 @@ code (`AVEI-DV-0001` …) is the asset ID.
 | Building, floor, room | from the room the device was captured in; *Move to another room* records the move in the history |
 | Department | on the room (`rooms.department`) |
 | Device category | from the shared category list (37 built-in in 7 groups; administrators add their own or hide built-in ones under Settings). Never free text |
-| Manufacturer, make, model, product family, function | manufacturer offers the shared list but accepts any name |
+| Manufacturer, model | manufacturer offers the shared list but accepts any name |
 | Serial number, MAC address, IP address | each with its own status: Unknown, Verified onsite, Verified from management system, Awaiting IT, Awaiting vendor, **Not accessible / unavailable**, Not applicable |
-| Hostname, asset tag, notes | optional |
+| Notes | optional (make, product family, function, hostname and asset tag were removed from the inventory screens on 19 November 2026; the columns stay in the database, and the legacy *Technical record* still edits hostname and role) |
 | Photographs | all photographs linked to the device; the originals are never changed |
 | Source of each value | `field_sources`: AI image recognition, read from label photograph, entered manually, existing record, imported, network discovery (listed for imported data; the application never scans) |
 | Identity confirmed | who and when; cleared automatically when the category, manufacturer or model changes afterwards |
@@ -103,8 +105,7 @@ when a person marks it; *Reopen* undoes it).
 
 | Signal | Strength |
 |---|---|
-| Same serial number, MAC address or asset tag (ignoring case and spaces) | Strong — "Potential duplicate assets" on the dashboard; *Unique devices* subtracts them |
-| An asset tag equal to an existing asset ID | Strong (shown while capturing) |
+| Same serial number or MAC address (ignoring case and spaces) | Strong — "Potential duplicate assets" on the dashboard; *Unique devices* subtracts them |
 | Same manufacturer and model in the same room | Weak — often several identical devices |
 | Nearly identical photographs (difference hash of the image) on two assets | Weak, secondary |
 

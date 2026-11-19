@@ -146,6 +146,10 @@
     const devs = U.sortBy(I.roomAssets(room.id), function (d) { return d.created_at; });
     const pend = I.roomPending(room.id);
     const listed = I.roomListed(room.id);
+    /* photographs of the room itself: not of a device, not part of a device capture */
+    const roomPhotos = P.forRoom(room.id).filter(function (ph) { return !ph.device_id && !ph.identification_id; });
+    const photoCtx = function () { return { room: store.get('rooms', room.id), category: 'Room overview', description: R.roomLabel(room) }; };
+    const startRoom = function () { const cur = store.get('rooms', room.id); if (cur && !cur.inventory_status) store.update('rooms', cur.id, { inventory_status: 'in_progress' }, { silent: true }); };
     const toList = I.listingPlan(room).filter(function (i) { return i.create; });
     const nx = nextRoom(room);
     const last = I.roomLastDate(room);
@@ -159,6 +163,12 @@
         h('div.btn-row.wrap', null,
           ID.captureButton({ key: 'room-up-' + room.id, library: true, kind: 'secondary', label: 'Upload photographs', room: function () { return store.get('rooms', room.id); }, after: function (cap) { ID.open({ capture: cap.id }); } }),
           ui.btn('Enter manually', { icon: 'edit', id: 'room-manual', onclick: function () { ID.open({ room: room }); } }))),
+      h('section.stack', null,
+        ui.label('Room photographs', h('span.count', null, String(roomPhotos.length))),
+        store.readOnly ? null : h('div.btn-row.wrap', null,
+          P.captureButton({ key: 'room-photo-' + room.id, label: 'Photograph the room', kind: 'secondary', id: 'room-photo', ctx: photoCtx, after: startRoom }),
+          P.captureButton({ key: 'room-photo-lib-' + room.id, label: 'Upload', kind: 'ghost', library: true, ctx: photoCtx, after: startRoom })),
+        roomPhotos.length ? P.gallery(roomPhotos, { caption: false }) : h('p.muted', null, 'No photographs of the room yet. A wide view from the door and one of the table and display wall are usually enough.')),
       toList.length && !store.readOnly ? ui.note('info', 'The room details name equipment that is not in the inventory yet: ' + toList.map(function (i) { return (i.create > 1 ? i.create + ' × ' : '') + i.text; }).join('; ') + '.',
         { key: 'tolist', title: 'Listed in the room details', action: h('div.btn-row', null, ui.btn('Add as listed devices', { sm: true, kind: 'primary', icon: 'list', id: 'room-list-go', onclick: function () { const n = I.createListed(room); EV.toast(U.plural(n, 'device') + ' listed', 'ok'); } })) }) : null,
       listed.length ? h('section.stack', null,
