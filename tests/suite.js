@@ -2215,10 +2215,13 @@
     assert(fab && fab.tagName === 'LABEL' && inp && inp.getAttribute('capture') === 'environment', 'in a room the capture button opens the camera in one tap');
     assert(document.getElementById('room-add-device'), 'the room has its Add device button');
     const rp = document.getElementById('room-photo'), rpi = rp && rp.querySelector('input[type=file]');
-    assert(rp && rpi && rpi.getAttribute('capture') === 'environment', 'the room page photographs the room itself in one tap');
+    assert(rp && rpi && rpi.getAttribute('capture') === 'environment' && rp.closest('#room-details'), 'the room details photograph the room itself in one tap');
     const shot = (await EV.photos.ingest([await imageFile('room view')], { room: room, category: 'Room overview' }))[0];
     await wait(80);
-    assert(document.querySelector('.page-roomsRoom .gallery img[src="' + shot.thumb + '"]') || Array.prototype.some.call(document.querySelectorAll('.page-roomsRoom .gallery .thumb'), function (t) { return t.title === shot.description || t.title === 'Room overview'; }), 'and shows the room photographs');
+    assert(Array.prototype.some.call(document.querySelectorAll('#room-details .gallery .thumb'), function (t) { return t.title === 'Room overview'; }), 'and the room details show the room photographs');
+    const det = document.querySelector('#room-details .label-row button'); det.click(); await wait(100);
+    assert(document.getElementById('room-photo-sheet') && document.querySelectorAll('.sheet .gallery .thumb').length >= 1, 'the Room details sheet has them too');
+    EV.ui.closeAll(); await wait(50);
     eq(['manufacturer', 'model', 'make', 'product_family', 'role', 'hostname', 'asset_tag'].map(function (k) { return I.FIELDS.some(function (f) { return f.k === k; }); }), [true, true, false, false, false, false, false], 'make, product family, function, hostname and asset tag are not inventory fields');
     EV.assets.open(ctx.invA); await wait(100);
     assert(/Identity|Identifiers/.test(document.querySelector('.sheet').textContent), 'asset record');

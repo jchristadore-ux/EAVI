@@ -90,8 +90,22 @@
         h('span.asset-ids', null, I.ID_FIELDS.slice().reverse().map(function (f) { return h('span', { key: f.k, 'class': 'asset-id' }, h('span.asset-id-k', null, f.short), idText(d, a, f)); }))),
       h('span.asset-right', null, ui.chip(I.statusLabel(a.status), I.STATUS_TONE[a.status]), a.exportState !== 'never' ? ui.chip(I.EXPORT_LABEL[a.exportState], a.exportState === 'current' ? 'accent' : 'warn') : null));
   };
+  /* photographs of the room itself (not of a device, not part of a device capture), part of the room details */
+  function roomPhotoBlock(room, where) {
+    const photos = P.forRoom(room.id).filter(function (ph) { return !ph.device_id && !ph.identification_id; });
+    const ctx = function () { return { room: store.get('rooms', room.id), category: 'Room overview', description: R.roomLabel(store.get('rooms', room.id) || room) }; };
+    const started = function () { const cur = store.get('rooms', room.id); if (cur && !cur.inventory_status) store.update('rooms', cur.id, { inventory_status: 'in_progress' }, { silent: true }); };
+    const sfx = where === 'sheet' ? '-sheet' : '';
+    return h('div.stack', { key: 'room-photos' + sfx, style: 'gap:8px' },
+      h('div.label-row', null, h('span.label', null, 'Room photographs'), h('span.count', null, String(photos.length))),
+      store.readOnly ? null : h('div.btn-row.wrap', null,
+        P.captureButton({ key: 'room-photo' + sfx + '-' + room.id, label: 'Photograph the room', kind: 'secondary', id: 'room-photo' + sfx, ctx: ctx, after: started }),
+        P.captureButton({ key: 'room-photo-lib' + sfx + '-' + room.id, label: 'Upload', kind: 'ghost', library: true, ctx: ctx, after: started })),
+      photos.length ? P.gallery(photos, { caption: false }) : h('p.muted', null, 'No photographs of the room yet. A wide view from the door and one of the table and display wall are usually enough.'));
+  }
   function editRoom(room) {
-    return ui.openEditor({ table: 'rooms', id: room.id, fields: S.F.inventoryRoom, title: 'Room details', sub: room.code, strict: false, size: 'auto', canDelete: false });
+    return ui.openEditor({ table: 'rooms', id: room.id, fields: S.F.inventoryRoom, title: 'Room details', sub: room.code, strict: false, size: 'auto', canDelete: false,
+      after: function (r) { return h('div.form-group', { key: 'photos' }, roomPhotoBlock(r, 'sheet')); } });
   }
   /* every room's listed equipment (display, camera and microphone details) becomes listed assets, after a preview */
   EV.inventoryListAll = function () {
@@ -146,10 +160,6 @@
     const devs = U.sortBy(I.roomAssets(room.id), function (d) { return d.created_at; });
     const pend = I.roomPending(room.id);
     const listed = I.roomListed(room.id);
-    /* photographs of the room itself: not of a device, not part of a device capture */
-    const roomPhotos = P.forRoom(room.id).filter(function (ph) { return !ph.device_id && !ph.identification_id; });
-    const photoCtx = function () { return { room: store.get('rooms', room.id), category: 'Room overview', description: R.roomLabel(room) }; };
-    const startRoom = function () { const cur = store.get('rooms', room.id); if (cur && !cur.inventory_status) store.update('rooms', cur.id, { inventory_status: 'in_progress' }, { silent: true }); };
     const toList = I.listingPlan(room).filter(function (i) { return i.create; });
     const nx = nextRoom(room);
     const last = I.roomLastDate(room);
@@ -163,12 +173,6 @@
         h('div.btn-row.wrap', null,
           ID.captureButton({ key: 'room-up-' + room.id, library: true, kind: 'secondary', label: 'Upload photographs', room: function () { return store.get('rooms', room.id); }, after: function (cap) { ID.open({ capture: cap.id }); } }),
           ui.btn('Enter manually', { icon: 'edit', id: 'room-manual', onclick: function () { ID.open({ room: room }); } }))),
-      h('section.stack', null,
-        ui.label('Room photographs', h('span.count', null, String(roomPhotos.length))),
-        store.readOnly ? null : h('div.btn-row.wrap', null,
-          P.captureButton({ key: 'room-photo-' + room.id, label: 'Photograph the room', kind: 'secondary', id: 'room-photo', ctx: photoCtx, after: startRoom }),
-          P.captureButton({ key: 'room-photo-lib-' + room.id, label: 'Upload', kind: 'ghost', library: true, ctx: photoCtx, after: startRoom })),
-        roomPhotos.length ? P.gallery(roomPhotos, { caption: false }) : h('p.muted', null, 'No photographs of the room yet. A wide view from the door and one of the table and display wall are usually enough.')),
       toList.length && !store.readOnly ? ui.note('info', 'The room details name equipment that is not in the inventory yet: ' + toList.map(function (i) { return (i.create > 1 ? i.create + ' × ' : '') + i.text; }).join('; ') + '.',
         { key: 'tolist', title: 'Listed in the room details', action: h('div.btn-row', null, ui.btn('Add as listed devices', { sm: true, kind: 'primary', icon: 'list', id: 'room-list-go', onclick: function () { const n = I.createListed(room); EV.toast(U.plural(n, 'device') + ' listed', 'ok'); } })) }) : null,
       listed.length ? h('section.stack', null,
@@ -182,15 +186,16 @@
         ui.label('Devices in this room', h('span.count', null, String(devs.length))),
         devs.length ? h('div.asset-list', null, devs.map(function (d) { return EV.assetRow(d); }))
           : ui.empty({ icon: 'camera', title: 'No devices recorded yet', text: 'Tap “Add device” and photograph the first one: front, then its label.' })),
-      h('section.stack', null,
-        ui.label('Room'),
+      h('section.stack', { id: 'room-details' },
+        ui.label('Room details', ui.btn('Edit', { sm: true, kind: 'ghost', icon: 'edit', onclick: function () { editRoom(room); } })),
         h('div.kv-list', null,
           ui.kv('Building', b.name), ui.kv('Floor', f.number ? 'Floor ' + f.number + (f.designation ? ' — ' + f.designation : '') : ''),
           ui.kv('Room number', room.number), ui.kv('Room name', room.name), ui.kv('Department / business unit', room.department),
           room.notes ? ui.kv('Notes', room.notes) : null,
           ui.kv('Inventory status', I.roomStatusLabel(s)),
           ui.kv('Last inventory activity', last ? U.fmtDateTime(last) : ''),
-          room.inventory_completed_at ? ui.kv('Marked complete', U.fmtDateTime(room.inventory_completed_at) + (room.inventory_completed_by ? ' · ' + room.inventory_completed_by : '')) : null)),
+          room.inventory_completed_at ? ui.kv('Marked complete', U.fmtDateTime(room.inventory_completed_at) + (room.inventory_completed_by ? ' · ' + room.inventory_completed_by : '')) : null),
+        roomPhotoBlock(room, 'page')),
       h('div.room-actions', null,
         s === 'complete'
           ? ui.btn('Reopen room inventory', { icon: 'undo', id: 'room-reopen', onclick: function () { store.update('rooms', room.id, { inventory_status: 'in_progress', inventory_completed_at: null, inventory_completed_by: '' }); } })
