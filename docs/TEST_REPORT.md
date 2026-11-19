@@ -37,6 +37,10 @@ What was tested, how, with what result — and what was not. Date of this run: *
 > including the new asset export workbook opened in Microsoft Excel (it found that `EV.xlsx.simple` named its tables
 > `tbl1`, which Excel refuses; fixed). The validator now opens each workbook in its own Excel instance. AI
 > identification was exercised only against a stand-in service: **no real AI provider was called** (§7).
+>
+> **Later run, 19 November 2026 (device category drop-down):** 78 tests; **78 pass**. The new test opens an asset
+> record, checks the category is a grouped drop-down of the list with *Other - type a new category* last, picks a
+> listed category, then types a new one: the device takes it only on **Add**, and the list offers it afterwards.
 
 ## 1. Summary
 

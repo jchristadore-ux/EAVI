@@ -59,7 +59,7 @@ code (`AVEI-DV-0001` …) is the asset ID.
 | Asset ID | `code`, system-generated, never reused |
 | Building, floor, room | from the room the device was captured in; *Move to another room* records the move in the history |
 | Department | on the room (`rooms.department`) |
-| Device category | picked from the shared list (37 built-in in 7 groups) or typed: a new name (for example "PoE injector") is added to the list (group Other) when the device is saved and is offered in every room after that; the same name in other capitals reuses the listed one. Administrators can hide entries under Settings |
+| Device category | a drop-down of the shared list (37 built-in in 7 groups); its last entry, *Other - type a new category*, opens a box to type one: a new name (for example "PoE injector") is added to the list (group Other) when **Add** is tapped and is offered in every room after that; the same name in other capitals reuses the listed one. Administrators can hide entries under Settings |
 | Manufacturer, model | manufacturer offers the shared list but accepts any name |
 | Serial number, MAC address, IP address | each with its own status: Unknown, Verified onsite, Verified from management system, Awaiting IT, Awaiting vendor, **Not accessible / unavailable**, Not applicable |
 | Switch port ID | **required once the device has an IP address**: the capture screen does not save without it, unless the port is stated as not accessible or not applicable; a device with an IP and no port is incomplete (dashboard: "Switch port ID not captured"). Same statuses as the other identifiers (`port_status`) |

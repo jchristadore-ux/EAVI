@@ -14,6 +14,43 @@
   const ai = (EV.ai = { transport: null, checking: false });
   const ID = (EV.identify = {});
 
+  /* ------------------------------------------------------------------ the device category picker
+     The prepopulated list as a drop-down (grouped), with a last entry to type a category that is not in it. A typed
+     name goes through I.ensureCategory: an existing name (any capitals) is reused, a new one joins the shared list so
+     the next room offers it. `key` identifies the form so the typing state survives a redraw. */
+  const typingCat = {};
+  ID.NEW_CATEGORY = '__new__';
+  ID.categoryPicker = function (key, value, o) {
+    o = o || {};
+    const pick = function (v) { delete typingCat[key]; EV.redraw(); if (o.onpick) o.onpick(v); };
+    const addTyped = function () {
+      const name = I.ensureCategory(typingCat[key] || '');
+      if (!name) { EV.toast('Type the category name first.', 'warn'); return; }
+      pick(name);
+    };
+    const groups = I.categoryGroups();
+    const listed = I.categories();
+    const kids = [h('option', { value: '' }, 'Choose a category')];
+    if (value && listed.indexOf(value) < 0) kids.push(h('option', { value: value }, value));
+    groups.forEach(function (g) { kids.push(h('optgroup', { label: g[0], key: 'g-' + g[0] }, g[1].map(function (n) { return h('option', { value: n, key: n }, n); }))); });
+    kids.push(h('option', { value: ID.NEW_CATEGORY }, 'Other — type a new category…'));
+    const typing = Object.prototype.hasOwnProperty.call(typingCat, key);
+    return h('div.stack', { style: 'gap:6px' },
+      h('select', { 'class': 'input select', id: o.id, disabled: !!o.disabled, value: typing ? ID.NEW_CATEGORY : (value || ''), 'aria-label': 'Device category',
+        onchange: function (e) {
+          const v = e.target.value;
+          if (v === ID.NEW_CATEGORY) { typingCat[key] = ''; EV.redraw(); setTimeout(function () { const el = document.getElementById((o.id || 'cat') + '-new'); if (el) el.focus(); }, 30); return; }
+          pick(v);
+        } }, kids),
+      typing && !o.disabled ? h('div.btn-row', null,
+        ui.input(typingCat[key], { id: (o.id || 'cat') + '-new', ph: 'New category, e.g. PoE injector',
+          oninput: function (v) { typingCat[key] = v; },
+          onkeydown: function (e) { if (e.key === 'Enter') { e.preventDefault(); addTyped(); } } }),
+        ui.btn('Add', { sm: true, kind: 'primary', id: (o.id || 'cat') + '-add', onclick: addTyped }),
+        ui.btn('Cancel', { sm: true, kind: 'ghost', onclick: function () { delete typingCat[key]; EV.redraw(); } })) : null,
+      typing && !o.disabled ? h('span.field-hint', null, 'Saved to the category list, so other rooms can choose it.') : null);
+  };
+
   /* ------------------------------------------------------------------ the identification service */
   function callService(method, body) {
     if (ai.transport) return ai.transport(method, body);
@@ -621,9 +658,8 @@
         ui.label('Device details'),
         h('div.form-grid', null,
           ui.field(h('span', null, 'Device category', h('span.req', null, ' *'), ' ', srcChip('category')),
-            h('div.stack', { style: 'gap:6px' }, h('div.combo', null,
-              ui.input(d.values.category || '', { id: 'ident-category', list: 'dl-ident-category', ph: 'Choose from the list, or type a new category', oninput: function (v) { set('category', v); } }),
-              h('datalist', { id: 'dl-ident-category' }, I.categories().map(function (x) { return h('option', { key: x, value: x }); }))),
+            h('div.stack', { style: 'gap:6px' },
+              ID.categoryPicker('ident-' + (c ? c.id : 'new'),d.values.category || '', { id: 'ident-category', onpick: function (v) { set('category', v); } }),
               ((d.suggest || {}).category || []).length ? h('div.chip-scroll', null, d.suggest.category.map(function (s) { return h('button', { type: 'button', key: s, 'class': 'pill', onclick: function () { set('category', s, 'ai', true); } }, s); })) : null),
             { key: 'category', div: true }),
           textField('manufacturer', 'Manufacturer', { half: true, list: I.manufacturers() }),

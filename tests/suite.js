@@ -2394,6 +2394,26 @@
     eq([ID.confirm(cap2.id).category, store.all('asset_taxonomy').filter(function (t) { return t.kind === 'category'; }).length - before], ['PoE injector', 1], 'no second entry');
     eq([I.ensureCategory('display'), I.ensureCategory(''), I.categoryGroups().find(function (g) { return g[0] === 'Other'; })[1].indexOf('PoE injector') >= 0], ['Display', '', true], 'a built-in name keeps its spelling; the new one is under Other');
   });
+  test('the device category is a drop-down of the list, with a last entry to type a new one that then appears in the list', async function () {
+    const room = invRoom('I-10b');
+    const d = I.create(room, { category: 'Display', manufacturer: 'LG', model: '55UH5F' }, {}, { confirm: true });
+    EV.assets.open(d.id); await wait(80);
+    let sel = document.getElementById('as-category');
+    const opts = function () { return Array.prototype.map.call(document.getElementById('as-category').options, function (x) { return x.value; }); };
+    eq([sel.tagName, sel.value, opts().indexOf('Camera') > 0, opts()[opts().length - 1], sel.querySelectorAll('optgroup').length > 1], ['SELECT', 'Display', true, ID.NEW_CATEGORY, true]);
+    sel.value = 'Camera'; sel.dispatchEvent(new Event('change', { bubbles: true })); await wait(60);
+    eq(store.get('devices', d.id).category, 'Camera');
+    sel = document.getElementById('as-category');
+    sel.value = ID.NEW_CATEGORY; sel.dispatchEvent(new Event('change', { bubbles: true })); await wait(80);
+    const typed = document.getElementById('as-category-new');
+    assert(typed, 'choosing the last entry shows a box to type the category');
+    eq(store.get('devices', d.id).category, 'Camera', 'nothing changes until the typed name is added');
+    typed.value = '  Media   converter '; typed.dispatchEvent(new Event('input', { bubbles: true }));
+    document.getElementById('as-category-add').click(); await wait(80);
+    eq([store.get('devices', d.id).category, !!document.getElementById('as-category-new'), document.getElementById('as-category').value, opts().indexOf('Media converter') > 0],
+      ['Media converter', false, 'Media converter', true], 'the typed name is stored, the box closes, and the list now offers it');
+    EV.ui.closeAll();
+  });
   test('a label in a photograph already taken can be read later: values are offered, added only when chosen, and never replace a verified one', async function () {
     const room = invRoom('I-11');
     const d = I.create(room, { category: 'Room collaboration system', manufacturer: 'Neat', model: 'Bar Pro', mac_address: '00:00:5E:00:53:77', mac_status: 'verified_onsite' }, {}, { confirm: true });
