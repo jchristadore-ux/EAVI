@@ -49,6 +49,32 @@ archived). A new capture in a room with listed equipment asks whether it is one 
 separately on the dashboard, do not start a room, are not in the quality figures, and stay out of the legacy audit
 screens, follow-up tasks and daily export until they are seen.
 
+## 1b. Punch list
+
+What needs to be put right in a room, recorded while its hardware is documented, and who is to resolve it.
+
+- **In the room** (Room Inventory → a room → *Punch list*, also reached with the *Punch list* button in the room's
+  header): type one item per line in the box, choose **To be resolved by** — *Internal AV support*, *AV integrator*
+  or *Decide later* — and tap **Add**. Each line becomes one item; a list marker typed or pasted in front of a line
+  (`- `, `• `, `1. `, `2) `) is dropped, the rest is kept as typed. Nothing can be added until a choice is made; the
+  choice then stays selected for the next lines and is offered again in the next room, where it can be changed.
+- Each item is open until it is marked resolved: tap the circle in front of it (tap again to reopen). Resolving
+  records who and when; reopening clears both. Tapping the text opens the item: its text, who resolves it, status,
+  a related device of the room, notes, and *Delete item* (a soft delete, kept in the change history).
+- Adding an item marks a room that was *Not started* as *In progress*. Open items do not stop a room being marked
+  complete: they are work for someone else.
+- The floor's room list shows each room's open items. **Punch List** in the navigation (and the dashboard shortcut)
+  lists every item room by room, with counts per party and filters by status, party, building, floor and text.
+- **Export** (Excel or CSV) writes exactly what the filters show. The workbook has a *Punch list* sheet, one sheet
+  per party when more than one party is present, and an *Export* sheet with the selection and counts. Columns: Item
+  ID, Building, Floor, Room number, Room name, Room ID, What needs to be put right, To be resolved by, Status,
+  Related device, Notes, Added, Added by, Resolved, Resolved by. A value starting with `=`, `+`, `-` or `@` is
+  written as text in the CSV.
+- Read-only accounts see the punch list but cannot add or change items.
+- Records: table `punch_items` (code `<org>-PL-0001`), with `room_id`, `floor_id`, `building_id`, optional
+  `device_id`, `text`, `resolver` (`internal`, `integrator` or empty = not assigned), `status` (`open` or
+  `resolved`), `notes`, `resolved_at`, `resolved_by`. It synchronises like every other table. It is not part of the
+  legacy daily export package.
 ## 2. The asset record
 
 An asset is a row of the existing `devices` table, so the legacy screens keep working on the same records. Its
@@ -166,6 +192,10 @@ merged record is deleted and kept in the history.
 - The legacy daily export package does not include the inventory tables or the bookkeeping columns, so its format
   (docs/EXPORT_FORMAT.md) is unchanged.
 
+- Device database version 3 (24 November 2026) adds the object store `punch_items`. The live workspace gets the
+  table from `supabase/upgrade-2026-11-24-punch-list.sql` (or the whole `supabase/schema.sql`), run before the
+  version that uses it is deployed.
+
 ## 7. Where things are in the code
 
 | File | What |
@@ -174,6 +204,7 @@ merged record is deleted and kept in the history.
 | `app/js/identify.js` | `EV.ai` (service client, answer checks) and `EV.identify` (capture screen, crop, barcode, fingerprint) |
 | `app/js/pages/inventory.js` | Inventory Dashboard |
 | `app/js/pages/rooms.js` | Room Inventory and the room workspace; `EV.assetRow` |
+| `app/js/punch.js` | `EV.punch`: punch list records, the room's punch list section, the Punch List page and its export |
 | `app/js/pages/assets.js` | Asset Registry, the asset record, Compare and merge, Identify Devices |
 | `app/js/pages/integration.js` | `EV.assetExport`: mappings, validation, CSV / Excel / JSON, export history |
 | `supabase/functions/identify-device/` | Server-side AI identification (not yet run) |

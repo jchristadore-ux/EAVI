@@ -49,14 +49,14 @@
   EV.editors.room = function (id, isNew) {
     return ui.openEditor({ table: 'rooms', id: id, isNew: isNew, fields: S.F.room, title: isNew ? 'New room / space' : 'Edit room',
       sub: function (r) { return r ? r.code + ' — permanent identifier' : ''; },
-      canDelete: (function () { const d = A.roomDependents(id); return !d.audits && !d.devices && !d.photos && !d.findings; })(),
+      canDelete: (function () { const d = A.roomDependents(id); return !d.audits && !d.devices && !d.photos && !d.findings && !d.punch; })(),
       onDeleted: function () { EV.back('/environment'); },
       after: function (r) {
         if (isNew) return null;
         const d = A.roomDependents(r.id);
         return [archiveToggle('rooms', r, 'room'),
-          (d.audits || d.devices || d.photos || d.findings) ? h('p.muted', { key: 'why' }, 'This room has ' + [d.audits ? U.plural(d.audits, 'audit') : '', d.devices ? U.plural(d.devices, 'device') : '',
-            d.photos ? U.plural(d.photos, 'photograph') : '', d.findings ? U.plural(d.findings, 'finding') : ''].filter(Boolean).join(', ') + ' and can be archived but not deleted.') : null];
+          (d.audits || d.devices || d.photos || d.findings || d.punch) ? h('p.muted', { key: 'why' }, 'This room has ' + [d.audits ? U.plural(d.audits, 'audit') : '', d.devices ? U.plural(d.devices, 'device') : '',
+            d.photos ? U.plural(d.photos, 'photograph') : '', d.findings ? U.plural(d.findings, 'finding') : '', d.punch ? U.plural(d.punch, 'punch list item') : ''].filter(Boolean).join(', ') + ' and can be archived but not deleted.') : null];
       } });
   };
   EV.editors.newRoom = function (floor) {

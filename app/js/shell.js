@@ -10,6 +10,7 @@
   const INV_NAV = (EV.INV_NAV = [
     { path: '/', label: 'Inventory Dashboard', icon: 'home' },
     { path: '/rooms', label: 'Room Inventory', icon: 'grid' },
+    { path: '/punch', label: 'Punch List', icon: 'flag' },
     { path: '/identify', label: 'Identify Devices', icon: 'camera' },
     { path: '/assets', label: 'Asset Registry', icon: 'database' },
     { path: '/integration', label: 'Export & Integration', icon: 'share' },
@@ -38,6 +39,7 @@
         if (p[1] === 'floor') return { page: 'roomsFloor', nav: '/rooms', id: p[2] };
         if (p[1] === 'room') return { page: 'roomsRoom', nav: '/rooms', id: p[2] };
         return { page: 'rooms', nav: '/rooms' };
+      case 'punch': return { page: 'punch', nav: '/punch' };
       case 'identify': return { page: 'identify', nav: '/identify' };
       case 'assets': return { page: 'assets', nav: '/assets' };
       case 'integration': return { page: 'integration', nav: '/integration' };

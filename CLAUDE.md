@@ -116,6 +116,16 @@ powershell -ExecutionPolicy Bypass -File tools\validate-outputs.ps1   # check th
 - Fixed on the way: `EV.xlsx.simple` named its tables `tbl1`..., which Excel refuses (reads as a cell reference);
   `tools/validate-outputs.ps1` now uses one Excel instance per workbook (calls were rejected while a previous
   workbook recalculated).
+## Punch list (24 November 2026)
+
+- Room Inventory -> a room -> *Punch list*: type one item per line, choose *To be resolved by* (Internal AV support /
+  AV integrator / Decide later), Add. *Punch List* page (`/punch`) lists every item room by room with filters and an
+  Excel / CSV export. Code in `app/js/punch.js`; reference in `docs/INVENTORY.md` section 1b.
+- New table `punch_items` (IndexedDB version 3), added to the live workspace on 24 November 2026 with
+  `supabase/upgrade-2026-11-24-punch-list.sql` before the push (row-level security on, 3 policies, 4 triggers; the 99
+  rooms, 122 devices, 2 buildings and 253 photos were unchanged). Not in the legacy daily export package.
+- 81 tests pass (`docs/TEST_REPORT.md`). Not tried on a real phone.
+
 ## Open items, in priority order
 
 1. Hosting is decided (owner, 12 November 2026): a **public** GitHub Pages site is acceptable for the application

@@ -1,3 +1,5 @@
 # build output (tools\build.ps1) and test output (tests/tests.html through tools\serve.ps1)
 dist/
 .testout/
+# local preview configuration of the Claude desktop app
+.claude/

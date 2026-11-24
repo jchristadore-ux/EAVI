@@ -35,6 +35,7 @@
       shortcut('camera', 'Photograph Device', 'Camera first, then identify', function () { EV.identify.startAnywhere(); }, { id: 'sc-photo' }),
       shortcut('zap', 'Review Unidentified', m.awaiting ? m.awaiting + ' waiting' : 'Nothing waiting', function () { EV.go('/identify'); }, { id: 'sc-review' }),
       shortcut('database', 'View All Assets', U.plural(m.captured, 'asset') + (m.listed ? ' · ' + m.listed + ' listed' : ''), function () { EV.go('/assets'); }, { id: 'sc-assets' }),
+      shortcut('flag', 'Punch List', (function () { const o = store.all('punch_items').filter(EV.punch.isOpen).length; return o ? o + ' open' : 'Nothing open'; })(), function () { EV.go('/punch'); }, { id: 'sc-punch' }),
       shortcut('share', 'Export Inventory', m.ready ? m.ready + ' ready' : 'CSV · Excel · JSON', function () { EV.go('/integration'); }, { id: 'sc-export' }));
     if (!m.buildings) {
       return [head, shortcuts,

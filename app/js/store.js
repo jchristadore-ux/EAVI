@@ -7,7 +7,7 @@
   'use strict';
   const EV = window.EV, U = EV.U, S = EV.S;
   const DB_NAME = window.EV_DB_NAME || 'av_environment_intelligence'; /* the test suite uses its own database */
-  const DB_VERSION = 2;   /* 2: asset inventory tables (asset_identifications, asset_taxonomy, export_profiles, asset_exports) */
+  const DB_VERSION = 3;   /* 2: asset inventory tables (asset_identifications, asset_taxonomy, export_profiles, asset_exports); 3: punch_items */
   const BACKUP_FORMAT = 'av-environment-intelligence-backup';
   /* Legacy names. Earlier versions of the application carried their first client's name in the database name, the
      backup format tag, the organization name they filled in by themselves, and four party / status values. They are
@@ -26,8 +26,8 @@
   const DETAIL = { functional_tests: 1, network_checks: 1, audit_notes: 1, audit_sections: 1, switch_ports: 1, network_links: 1, backlog_it_links: 1,
     room_configuration_members: 1, photos: 1 };
   /* bookkeeping fields that are not a change anyone made */
-  const UNLOGGED_FIELDS = { thumb: 1, remote_ref: 1, remote_edit_ref: 1, sort_order: 1, tested_at: 1, checked_at: 1, status_changed_at: 1, phash: 1 };
-  const STATUS_TABLES = { backlog_items: 1, it_requests: 1, audits: 1 };
+  const UNLOGGED_FIELDS = { thumb: 1, remote_ref: 1, remote_edit_ref: 1, sort_order: 1, tested_at: 1, checked_at: 1, status_changed_at: 1, phash: 1, resolved_at: 1, resolved_by: 1 };
+  const STATUS_TABLES = { backlog_items: 1, it_requests: 1, audits: 1, punch_items: 1 };
   const EMPTY = Object.freeze([]);
 
   const mem = {};

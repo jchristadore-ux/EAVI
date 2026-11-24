@@ -285,7 +285,7 @@
   };
   A.roomDependents = function (roomId) {
     return { audits: store.by('audits', 'room_id', roomId).length, devices: store.by('devices', 'room_id', roomId).length, photos: store.by('photos', 'room_id', roomId).length,
-      findings: store.by('findings', 'room_id', roomId).length };
+      findings: store.by('findings', 'room_id', roomId).length, punch: store.by('punch_items', 'room_id', roomId).length };
   };
 
   /* ------------------------------------------------------------------ removal with referential clean-up

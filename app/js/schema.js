@@ -123,6 +123,9 @@
     ['confirmed', 'Confirmed'], ['discarded', 'Discarded']];
   S.ROOM_INVENTORY = [['', 'Not started'], ['in_progress', 'In progress'], ['complete', 'Complete']];
   S.EXPORT_FORMATS = [['csv', 'CSV'], ['xlsx', 'Excel (XLSX)'], ['json', 'JSON']];
+  /* punch list: who resolves an item ('' = not decided yet) and whether it is still open */
+  S.PUNCH_PARTIES = [['internal', 'Internal AV support'], ['integrator', 'AV integrator']];
+  S.PUNCH_STATUS = [['open', 'Open'], ['resolved', 'Resolved']];
 
   S.FINDING_CATEGORIES = ['Audio', 'Video', 'Control & UX', 'Network & Security', 'Documentation', 'Training', 'Spare Parts', 'Infrastructure',
     'Preventive Maintenance', 'Other'];
@@ -285,6 +288,11 @@
     asset_exports: {
       label: 'Asset export', code: ['AX', 4],
       cols: 'profile_id~export_profiles profile_name format scope:json record_count:int counts:json validation:json filename exported_by status'
+    },
+    /* One punch list item: a thing in a room to be put right, typed in as it is seen, and who is to resolve it. */
+    punch_items: {
+      label: 'Punch list item', code: ['PL', 4],
+      cols: 'code building_id!>buildings floor_id!>floors room_id!>rooms device_id~devices text resolver status notes resolved_at:ts resolved_by sort_order:num'
     }
   });
   S.COMMON_COLS = ['id', 'org_id', 'created_at', 'updated_at', 'created_by', 'updated_by', 'deleted_at', 'is_demo'];
@@ -323,7 +331,8 @@
       asset_identifications: [['status', opt(S.IDENTIFICATION_STATUS)]],
       asset_taxonomy: [['kind', opt(['category', 'manufacturer'])]],
       export_profiles: [['format', opt(S.EXPORT_FORMATS)]],
-      asset_exports: [['format', opt(S.EXPORT_FORMATS)], ['status', opt(['success', 'failed'])]]
+      asset_exports: [['format', opt(S.EXPORT_FORMATS)], ['status', opt(['success', 'failed'])]],
+      punch_items: [['resolver', opt(S.PUNCH_PARTIES)], ['status', opt(S.PUNCH_STATUS)]]
     };
   })();
 
@@ -357,6 +366,7 @@
       case 'asset_taxonomy': return (r.kind === 'manufacturer' ? 'manufacturer ' : 'category ') + (r.name || '');
       case 'export_profiles': return r.name || 'Export mapping';
       case 'asset_exports': return 'asset export ' + (r.code || '');
+      case 'punch_items': { const s = String(r.text || '').replace(/\s+/g, ' ').trim(); return s.length > 70 ? s.slice(0, 69) + '…' : (s || 'Punch list item'); }
       default: return r.name || r.title || r.code || table;
     }
   };
@@ -407,6 +417,14 @@
     { k: 'name', label: 'Room name', half: true },
     { k: 'department', label: 'Department / business unit', ph: 'e.g. Investment Banking' },
     { k: 'notes', label: 'Room notes', type: 'textarea', rows: 2 }
+  ];
+  /* a punch list item as its edit sheet shows it */
+  F.punchItem = [
+    { k: 'text', label: 'What needs to be put right', type: 'textarea', rows: 3, req: true },
+    { k: 'resolver', label: 'To be resolved by', type: 'select', opts: S.PUNCH_PARTIES, half: true },
+    { k: 'status', label: 'Status', type: 'select', opts: S.PUNCH_STATUS, half: true },
+    { k: 'device_id', label: 'Related device', type: 'device' },
+    { k: 'notes', label: 'Notes', type: 'textarea', rows: 2, ph: 'Anything the person resolving it should know' }
   ];
   F.configuration = [
     { k: 'name', label: 'Configuration name', req: true, ph: 'e.g. 23A Combined (North + South)' },

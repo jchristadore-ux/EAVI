@@ -38,6 +38,15 @@ What was tested, how, with what result — and what was not. Date of this run: *
 > `tbl1`, which Excel refuses; fixed). The validator now opens each workbook in its own Excel instance. AI
 > identification was exercised only against a stand-in service: **no real AI provider was called** (§7).
 >
+> **Later run, 24 November 2026 (punch list):** 81 tests; **81 pass**, and `tools/validate-outputs.ps1` opened the
+> punch list workbook in Excel without repair. The new test types three lines into a room's punch list, checks that
+> nothing can be added until *To be resolved by* is chosen, adds them, resolves and reopens one from the list (who and
+> when recorded, then cleared), edits one in its sheet (status, related device), filters the Punch List page, exports
+> Excel and CSV (sheet names, columns, a formula written as text), shows the list read-only, checks that a room with a
+> punch list can be archived but not deleted, and that two rooms with the same label keep their items apart. The phone
+> layout test covers the Punch List page and the item sheet at 390 px. **Not** exercised on a real phone; the live
+> workspace table is added by `supabase/upgrade-2026-11-24-punch-list.sql`.
+>
 > **Later run, 19 November 2026 (room list picture):** 80 tests; **80 pass**. The new test chooses a device's
 > room-list picture by a simulated mouse drag onto the slot (a drop elsewhere changes nothing, no viewer opens), by the
 > viewer button, refuses another device's photograph, and falls back to the first photograph when the chosen one is
@@ -196,6 +205,8 @@ text. They do not show that the SQL runs, or that Supabase behaves as the mocks 
 | 73 | registry links, room page, older database | A link into the registry shows exactly what it names; the room page writes nothing while shown; a sync against a database without the new columns says to run `supabase/schema.sql` and keeps the changes queued |
 | 74 | listed equipment | Room details become listed assets without guessing (N/A skipped, quantities counted, a bar named twice is one device, misspelt names not corrected); listing twice adds nothing; listed assets are not in the audit screens, follow-ups or quality filters; a capture confirms a listed asset in place; a capture can be linked to one; "not in this room" archives it and it is not listed again |
 | 69 | upgrade in place | The new object stores exist; `supabase/schema.sql` adds every new column with `if not exists` and re-applies the identifier status list with `unavailable`; no value list exists only inside a `create table`; the daily export's device columns are unchanged |
+| 81 | punch list | One item per line, nothing assigned until a party is chosen (or *Decide later*); resolve / reopen records and clears who and when; the edit sheet links a device of the room; filters by status, party, building and text; Excel and CSV export room by room with the formula guard; read-only view; a room with punch items is archived, not deleted |
+
 ## 5. Manual checks (11–12 November 2026)
 
 | Check | Method | Result |

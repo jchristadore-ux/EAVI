@@ -1285,7 +1285,7 @@
       const routes = ['/', '/environment', '/floor/' + f22.id, '/room/' + a22B.room_id, '/audits', '/audit/' + a22B.id, '/devices', '/devices?filter=incomplete', '/infrastructure', '/infrastructure?tab=switches',
         '/infrastructure?tab=addressing', '/infrastructure?tab=dependencies', '/infrastructure?tab=validation', '/backlog', '/backlog?tab=triage', '/backlog/' + ctx.bl1.id, '/coordination', '/spares', '/reports',
         '/reports/executive', '/reports/room?audit=' + a22B.id, '/reports/devices', '/reports/network', '/export', '/settings',
-        '/legacy', '/rooms', '/rooms/floor/' + f22.id, '/rooms/room/' + a22B.room_id, '/identify', '/assets', '/assets?tab=review', '/assets?tab=duplicates', '/integration'];
+        '/legacy', '/rooms', '/rooms/floor/' + f22.id, '/rooms/room/' + a22B.room_id, '/identify', '/assets', '/assets?tab=review', '/assets?tab=duplicates', '/integration', '/punch'];
       /* one-handed use: every control that is tapped is at least 44 px in both directions. A switch, a text link and a
          tappable chip keep their look and carry a 44 px touch area around them instead. */
       let controls = 0;
@@ -1334,7 +1334,8 @@
         ['quick actions', function () { return w.EV.openNew(); }], ['photograph viewer', function () { return w.EV.photos.openViewer(store.all('photos').find(function (p) { return p.is_demo; }).id); }],
         ['asset record', function () { return w.EV.assets.open(dev.id); }], ['capture screen', function () { return w.EV.identify.open({ room: w.EV.store.get('rooms', a22B.room_id) }); }],
         ['compare and merge', function () { const o = store.all('devices').find(function (x) { return x.is_demo && x.id !== dev.id && !x.archived; }); return w.EV.assets.mergeSheet(dev.id, o.id); }],
-        ['export mapping editor', function () { return w.EV.assetExport.editMapping(null); }]];
+        ['export mapping editor', function () { return w.EV.assetExport.editMapping(null); }],
+        ['punch list item', function () { const it = w.EV.punch.add(w.EV.store.get('rooms', a22B.room_id), 'Phone-width punch item', 'integrator')[0]; return w.EV.punch.edit(it.id); }]];
       for (const s of sheets) {
         s[1](); await wait(160);
         const el = d.querySelector('.sheet');
@@ -2195,7 +2196,7 @@
     EV.go('/'); await wait(150);
     assert(document.querySelector('.page-inventory') && /Inventory Dashboard/.test(document.querySelector('.page-title').textContent), 'the dashboard is the start page');
     const nav = Array.prototype.map.call(document.querySelectorAll('.sidebar .nav-item'), function (a) { return a.textContent.trim().replace(/\d+$/, ''); });
-    eq(nav.slice(0, 6), ['Inventory Dashboard', 'Room Inventory', 'Identify Devices', 'Asset Registry', 'Export & Integration', 'Settings']);
+    eq(nav.slice(0, 7), ['Inventory Dashboard', 'Room Inventory', 'Punch List', 'Identify Devices', 'Asset Registry', 'Export & Integration', 'Settings']);
     assert(nav.indexOf('Room Audits') < 0 && nav.some(function (n) { return /^Legacy Command Center/.test(n); }), 'legacy sections are behind one link');
     for (const n of EV.NAV) {
       EV.go(n.path); await wait(80);
@@ -2206,7 +2207,7 @@
     assert(Array.prototype.some.call(document.querySelectorAll('.sidebar .nav-item'), function (a) { return /Room Audits/.test(a.textContent); }), 'the setting shows them everywhere');
     store.kvSet('show_legacy', false);
     const room = store.get('rooms', store.get('devices', ctx.invA).room_id);
-    for (const p of ['/', '/rooms', '/rooms/floor/' + room.floor_id, '/rooms/room/' + room.id, '/identify', '/assets', '/assets?tab=review', '/assets?tab=duplicates', '/assets?filter=missing_mac', '/integration', '/settings']) {
+    for (const p of ['/', '/rooms', '/rooms/floor/' + room.floor_id, '/rooms/room/' + room.id, '/identify', '/assets', '/assets?tab=review', '/assets?tab=duplicates', '/assets?filter=missing_mac', '/integration', '/punch', '/settings']) {
       EV.go(p); await wait(100);
       assert(!document.querySelector('.crash') && !/Page not found/.test(document.querySelector('.page-title').textContent), p + ' renders');
     }
@@ -2237,7 +2238,11 @@
     EV.go('/'); await wait(50);
   });
   test('the device database and the cloud schema are upgraded in place: new tables exist, and the SQL adds new columns and value lists without touching existing rows', async function () {
-    for (const t of ['asset_identifications', 'asset_taxonomy', 'export_profiles', 'asset_exports']) await rawAll(t);
+    for (const t of ['asset_identifications', 'asset_taxonomy', 'export_profiles', 'asset_exports', 'punch_items']) await rawAll(t);
+    const up = await (await fetch('../supabase/upgrade-2026-11-24-punch-list.sql', { cache: 'no-store' })).text();
+    ['create table if not exists public.punch_items (', 'alter table public.punch_items enable row level security;', 'create policy punch_items_update on public.punch_items',
+      'create trigger z_audit after insert or update on public.punch_items', 'punch_items_resolver_check', 'begin;', 'commit;'].forEach(function (s) { assert(up.indexOf(s) >= 0, 'the punch list upgrade has: ' + s); });
+    assert(!/\b(drop table|delete from|truncate|update public\.)/i.test(up), 'the punch list upgrade only adds');
     const sql = await (await fetch('../supabase/schema.sql', { cache: 'no-store' })).text();
     ['make text', 'field_sources jsonb', 'manual_review boolean not null default false', 'export_sig text'].forEach(function (c) { assert(sql.indexOf('alter table public.devices add column if not exists ' + c + ';') >= 0, 'devices gets ' + c); });
     assert(sql.indexOf('alter table public.rooms add column if not exists department text;') >= 0, 'rooms gets department');
@@ -2521,6 +2526,107 @@
     eq(I.asset(d4).states.switch_port, 'not_required', 'no IP address, no port needed');
     eq(I.update(store.get('devices', d.id), { switch_port: 'Gi1/0/13' }).field_sources.switch_port, 'manual');
     assert(XA.SOURCES.some(function (s) { return s[0] === 'switch_port'; }), 'the port can be exported');
+  });
+  test('punch list: items are typed one per line in a room with who resolves them, nothing is assigned by itself, resolving records who and when, and the list is filtered and exported room by room', async function () {
+    const PL = EV.punch;
+    eq(PL.split('  - Replace HDMI cable at table\n\n• Touch panel glare  \n1. Relabel rack\n1.5 m cable too short\n2) Re-aim   camera\r\n'),
+      ['Replace HDMI cable at table', 'Touch panel glare', 'Relabel rack', '1.5 m cable too short', 'Re-aim camera'], 'one item per line; list markers dropped, text kept');
+    const room = invRoom('I-PL1');
+    EV.go('/rooms/room/' + room.id); await wait(120);
+    const sec = function () { return document.getElementById('room-punch'); };
+    const add = function () { return document.getElementById('punch-add'); };
+    const seg = function (label) { return Array.prototype.find.call(sec().querySelectorAll('.seg-btn'), function (b) { return b.textContent === label; }); };
+    const type = async function (text) { const ta = document.getElementById('punch-draft'); ta.value = text; ta.dispatchEvent(new Event('input', { bubbles: true })); await wait(80); };
+    assert(sec() && add() && add().disabled, 'the room page has a punch list, with nothing to add yet');
+    assert(document.getElementById('room-punch-jump'), 'and a button in the room header that leads to it');
+    await type('Display flickers on input 2\nCable cover missing under table\n\n   \nCeiling mic not in the DSP design');
+    assert(/Add 3 items/.test(add().textContent), 'three lines, three items: ' + add().textContent);
+    assert(add().disabled && /Choose who resolves it/.test(sec().textContent) && !sec().querySelector('.seg-btn.on'), 'no party is assumed: one is chosen first');
+    seg('AV integrator').click(); await wait(60);
+    add().click(); await wait(100);
+    let items = PL.forRoom(room.id);
+    eq(items.map(function (p) { return [p.text, p.resolver, p.status, /-PL-\d{4}$/.test(p.code), p.room_id, p.floor_id, p.building_id, p.device_id]; }),
+      [['Display flickers on input 2', 'integrator', 'open', true, room.id, room.floor_id, room.building_id, null], ['Cable cover missing under table', 'integrator', 'open', true, room.id, room.floor_id, room.building_id, null],
+        ['Ceiling mic not in the DSP design', 'integrator', 'open', true, room.id, room.floor_id, room.building_id, null]]);
+    eq([document.getElementById('punch-draft').value, store.get('rooms', room.id).inventory_status], ['', 'in_progress'], 'the box is emptied and the room counts as visited');
+    assert(seg('AV integrator').classList.contains('on'), 'the choice stays for the next line');
+    seg('Decide later').click(); await type('Wall plate label faded'); add().click(); await wait(100);
+    items = PL.forRoom(room.id);
+    eq([items.length, items[3].resolver, items[3].text], [4, '', 'Wall plate label faded'], '"Decide later" leaves the party open');
+    const room2 = invRoom('I-PL2');
+    eq([PL.draft(room2.id).resolver, PL.draft(room2.id).text], ['', ''], 'the next room offers the last choice again, with an empty box');
+    /* resolve from the list, then reopen */
+    document.getElementById('punch-check-' + items[0].id).click(); await wait(80);
+    let p0 = store.get('punch_items', items[0].id);
+    eq([p0.status, !!p0.resolved_at, p0.resolved_by], ['resolved', true, store.actor()]);
+    assert(store.all('activity_log').some(function (l) { return l.action === 'status_changed' && l.entity_id === p0.id && /open → resolved/.test(l.summary); }), 'the change is in the history');
+    assert(sec().querySelector('.punch-done'), 'a resolved item is shown as done');
+    document.getElementById('punch-check-' + p0.id).click(); await wait(80);
+    p0 = store.get('punch_items', p0.id);
+    eq([p0.status, p0.resolved_at, p0.resolved_by], ['open', null, ''], 'reopening clears who and when');
+    /* the edit sheet: text, party, status, related device, notes */
+    const dev = I.create(room, { category: 'Display', manufacturer: 'LG', model: '55UH5F' }, {}, { confirm: true });
+    PL.edit(items[1].id); await wait(100);
+    const sheet = document.querySelector('.sheet');
+    const sel = function (k) { return sheet.querySelector('select[id$="-' + k + '"]'); };
+    assert(sel('status') && sel('resolver') && sel('device_id') && sheet.querySelector('textarea[id$="-text"]'), 'the sheet edits the item');
+    assert(Array.prototype.some.call(sel('device_id').options, function (o) { return o.value === dev.id; }), 'devices of this room can be linked');
+    sel('device_id').value = dev.id; sel('device_id').dispatchEvent(new Event('change', { bubbles: true })); await wait(60);
+    sel('status').value = 'resolved'; sel('status').dispatchEvent(new Event('change', { bubbles: true })); await wait(60);
+    const p1 = store.get('punch_items', items[1].id);
+    eq([p1.status, !!p1.resolved_at, p1.resolved_by, p1.device_id], ['resolved', true, store.actor(), dev.id]);
+    EV.ui.closeAll(); await wait(40);
+    /* the floor shows each room's open count */
+    EV.go('/rooms/floor/' + room.floor_id); await wait(100);
+    assert(/3 open punch items/.test(document.querySelector('.page').textContent), 'the room row counts open items');
+    /* the punch list page, filtered */
+    EV.go('/punch'); await wait(120);
+    assert(!document.querySelector('.crash') && /Punch List/.test(document.querySelector('.page-title').textContent), 'the page renders');
+    const st = PL.filterState;
+    Object.assign(st, { status: 'open', party: 'integrator', building: room.building_id, floor: '', q: '' });
+    eq(PL.filtered().map(function (p) { return p.text; }), ['Display flickers on input 2', 'Ceiling mic not in the DSP design']);
+    Object.assign(st, { party: 'none' });
+    eq(PL.filtered().map(function (p) { return p.text; }), ['Wall plate label faded']);
+    Object.assign(st, { status: 'all', party: 'all', q: 'cable' });
+    eq(PL.filtered().map(function (p) { return p.text; }), ['Cable cover missing under table']);
+    /* export: what is selected, room by room; Excel opens without repair (checked by validate-outputs.ps1) */
+    PL.add(store.get('rooms', room2.id), '=HYPERLINK("http://example.invalid")', 'internal');
+    Object.assign(st, { status: 'all', party: 'all', q: '' });
+    const sel4 = PL.filtered();
+    eq(sel4.map(function (p) { return store.get('rooms', p.room_id).number; }), ['I-PL1', 'I-PL1', 'I-PL1', 'I-PL1', 'I-PL2'], 'in room order');
+    const x = await PL.build(sel4, { format: 'xlsx', scope: PL.scopeLabel() });
+    await save('punch_list_test.xlsx', x.blob);
+    const wb = await textOf(await unzip(x.blob), 'xl/workbook.xml');
+    eq((wb.match(/<sheet [^>]*name="[^"]+"/g) || []).map(function (s) { return /name="([^"]+)"/.exec(s)[1]; }), ['Punch list', 'Internal AV support', 'AV integrator', 'Not assigned', 'Export']);
+    const c = await PL.build(sel4, { format: 'csv', scope: 'x' });
+    const rows = csvParse((await c.blob.text()).replace(/^﻿/, ''));
+    eq(rows[0], PL.COLUMNS);
+    eq(rows.length, 6);
+    const r1 = rows.find(function (r) { return r[6] === 'Cable cover missing under table'; });
+    eq([r1[3], r1[7], r1[8], r1[14], /LG 55UH5F/.test(r1[9])], ['I-PL1', 'AV integrator', 'Resolved', store.actor(), true]);
+    eq(rows.find(function (r) { return r[3] === 'I-PL2'; })[6].charAt(0), "'", 'a formula is written as text');
+    eq(rows.find(function (r) { return r[6] === 'Wall plate label faded'; })[7], 'Not assigned');
+    /* read-only: the list is shown, nothing can be typed or changed */
+    store.readOnly = true;
+    try {
+      EV.go('/rooms/room/' + room.id); await wait(120);
+      assert(sec() && !document.getElementById('punch-add') && !document.getElementById('punch-draft') && document.getElementById('punch-check-' + items[0].id).disabled, 'read-only accounts see the list only');
+    } finally { store.readOnly = false; }
+    /* a room with a punch list is archived, never deleted with it */
+    const room3 = invRoom('I-PL3'); PL.add(room3, 'Only a punch item here', 'internal');
+    eq(A.roomDependents(room3.id).punch, 1);
+    EV.editors.room(room3.id); await wait(100);
+    assert(!Array.prototype.some.call(document.querySelectorAll('.sheet-foot button'), function (b) { return /Delete/.test(b.textContent); }) && /1 punch list item/.test(document.querySelector('.sheet').textContent), 'the room can be archived but not deleted');
+    EV.ui.closeAll(); await wait(40);
+    /* two rooms that read the same keep their items together */
+    const twinA = invRoom('I-PL-TWIN'), twinB = A.addRoom(ctx.invFloor, { number: 'I-PL-TWIN', name: 'Inventory room I-PL-TWIN', department: '' });
+    PL.add(twinA, 'Twin A one\nTwin A two', 'internal'); PL.add(twinB, 'Twin B one\nTwin B two', 'internal');
+    const twins = PL.all().filter(function (p) { return /^Twin/.test(p.text); }).map(function (p) { return p.room_id; });
+    eq([twins.length, twins[0] === twins[1], twins[2] === twins[3], twins[1] !== twins[2]], [4, true, true, true], 'grouped room by room');
+    /* deleting removes it from every list (a soft delete, kept in history) */
+    EV.act.remove('punch_items', items[3].id);
+    eq([PL.forRoom(room.id).length, !!store.getAny('punch_items', items[3].id).deleted_at], [3, true]);
+    EV.go('/'); await wait(50);
   });
   /* ------------------------------------------------------------------ runner */
   function render() {

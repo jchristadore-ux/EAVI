@@ -864,6 +864,30 @@ create table if not exists public.asset_exports (
   server_updated_at timestamptz not null default clock_timestamp(),
   constraint asset_exports_updated_after_created check (updated_at >= created_at)
 );
+create table if not exists public.punch_items (
+  id uuid primary key,
+  org_id uuid not null references public.organizations(id),
+  code text,
+  building_id uuid not null,
+  floor_id uuid not null,
+  room_id uuid not null,
+  device_id uuid,
+  text text,
+  resolver text,
+  status text,
+  notes text,
+  resolved_at timestamptz,
+  resolved_by text,
+  sort_order numeric,
+  created_at timestamptz not null,
+  updated_at timestamptz not null,
+  created_by text,
+  updated_by text,
+  deleted_at timestamptz,
+  is_demo boolean not null default false,
+  server_updated_at timestamptz not null default clock_timestamp(),
+  constraint punch_items_updated_after_created check (updated_at >= created_at)
+);
 
 -- ---------------------------------------------------------------- columns added since the first version (no-ops on a new database)
 alter table public.buildings add column if not exists name text;
@@ -1271,6 +1295,18 @@ alter table public.asset_exports add column if not exists validation jsonb;
 alter table public.asset_exports add column if not exists filename text;
 alter table public.asset_exports add column if not exists exported_by text;
 alter table public.asset_exports add column if not exists status text;
+alter table public.punch_items add column if not exists code text;
+alter table public.punch_items add column if not exists building_id uuid;
+alter table public.punch_items add column if not exists floor_id uuid;
+alter table public.punch_items add column if not exists room_id uuid;
+alter table public.punch_items add column if not exists device_id uuid;
+alter table public.punch_items add column if not exists text text;
+alter table public.punch_items add column if not exists resolver text;
+alter table public.punch_items add column if not exists status text;
+alter table public.punch_items add column if not exists notes text;
+alter table public.punch_items add column if not exists resolved_at timestamptz;
+alter table public.punch_items add column if not exists resolved_by text;
+alter table public.punch_items add column if not exists sort_order numeric;
 
 -- ---------------------------------------------------------------- value constraints
 alter table public.rooms drop constraint if exists rooms_inventory_status_check;
@@ -1331,6 +1367,10 @@ alter table public.asset_exports drop constraint if exists asset_exports_format_
 alter table public.asset_exports add constraint asset_exports_format_check check (format is null or format in ('csv', 'xlsx', 'json', ''));
 alter table public.asset_exports drop constraint if exists asset_exports_status_check;
 alter table public.asset_exports add constraint asset_exports_status_check check (status is null or status in ('success', 'failed', ''));
+alter table public.punch_items drop constraint if exists punch_items_resolver_check;
+alter table public.punch_items add constraint punch_items_resolver_check check (resolver is null or resolver in ('internal', 'integrator', ''));
+alter table public.punch_items drop constraint if exists punch_items_status_check;
+alter table public.punch_items add constraint punch_items_status_check check (status is null or status in ('open', 'resolved', ''));
 
 -- ---------------------------------------------------------------- foreign keys (added after all tables exist)
 alter table public.floors drop constraint if exists floors_building_id_fkey;
@@ -1435,6 +1475,12 @@ alter table public.photos drop constraint if exists photos_floor_id_fkey;
 alter table public.photos add constraint photos_floor_id_fkey foreign key (floor_id) references public.floors(id);
 alter table public.photos drop constraint if exists photos_room_id_fkey;
 alter table public.photos add constraint photos_room_id_fkey foreign key (room_id) references public.rooms(id);
+alter table public.punch_items drop constraint if exists punch_items_building_id_fkey;
+alter table public.punch_items add constraint punch_items_building_id_fkey foreign key (building_id) references public.buildings(id);
+alter table public.punch_items drop constraint if exists punch_items_floor_id_fkey;
+alter table public.punch_items add constraint punch_items_floor_id_fkey foreign key (floor_id) references public.floors(id);
+alter table public.punch_items drop constraint if exists punch_items_room_id_fkey;
+alter table public.punch_items add constraint punch_items_room_id_fkey foreign key (room_id) references public.rooms(id);
 
 -- useful uniqueness within an organization
 create unique index if not exists room_configuration_members_unique on public.room_configuration_members (configuration_id, room_id) where deleted_at is null;
@@ -1563,6 +1609,12 @@ create index if not exists asset_taxonomy_sync_idx on public.asset_taxonomy (org
 create index if not exists export_profiles_sync_idx on public.export_profiles (org_id, server_updated_at, id);
 create index if not exists asset_exports_profile_id_idx on public.asset_exports (profile_id);
 create index if not exists asset_exports_sync_idx on public.asset_exports (org_id, server_updated_at, id);
+create index if not exists punch_items_building_id_idx on public.punch_items (building_id);
+create index if not exists punch_items_floor_id_idx on public.punch_items (floor_id);
+create index if not exists punch_items_room_id_idx on public.punch_items (room_id);
+create index if not exists punch_items_device_id_idx on public.punch_items (device_id);
+create index if not exists punch_items_sync_idx on public.punch_items (org_id, server_updated_at, id);
+create index if not exists punch_items_code_idx on public.punch_items (org_id, code);
 create index if not exists devices_identity_idx on public.devices (org_id, ip_address, mac_address, serial_number);
 create index if not exists activity_log_at_idx on public.activity_log (org_id, at desc);
 create index if not exists backlog_items_status_idx on public.backlog_items (org_id, status, priority);
@@ -1838,6 +1890,15 @@ drop policy if exists asset_exports_insert on public.asset_exports;
 create policy asset_exports_insert on public.asset_exports for insert to authenticated with check (public.can_write_org(org_id));
 drop policy if exists asset_exports_update on public.asset_exports;
 create policy asset_exports_update on public.asset_exports for update to authenticated using (public.can_write_org(org_id)) with check (public.can_write_org(org_id));
+revoke all on table public.punch_items from anon, authenticated;
+grant select, insert, update on table public.punch_items to authenticated;
+alter table public.punch_items enable row level security;
+drop policy if exists punch_items_select on public.punch_items;
+create policy punch_items_select on public.punch_items for select to authenticated using (public.is_org_member(org_id));
+drop policy if exists punch_items_insert on public.punch_items;
+create policy punch_items_insert on public.punch_items for insert to authenticated with check (public.can_write_org(org_id));
+drop policy if exists punch_items_update on public.punch_items;
+create policy punch_items_update on public.punch_items for update to authenticated using (public.can_write_org(org_id)) with check (public.can_write_org(org_id));
 -- No DELETE privilege and no DELETE policy exist on any data table: clients cannot hard-delete. Deletion is a soft delete (deleted_at).
 
 -- ---------------------------------------------------------------- triggers
@@ -2081,6 +2142,14 @@ drop trigger if exists c_stamp on public.asset_exports;
 create trigger c_stamp before insert or update on public.asset_exports for each row execute function public.stamp_server_updated_at();
 drop trigger if exists z_audit on public.asset_exports;
 create trigger z_audit after insert or update on public.asset_exports for each row execute function public.record_audit_trail();
+drop trigger if exists a_keep_newer on public.punch_items;
+create trigger a_keep_newer before update on public.punch_items for each row execute function public.keep_newer_version();
+drop trigger if exists b_lock_org on public.punch_items;
+create trigger b_lock_org before update on public.punch_items for each row execute function public.lock_org_id();
+drop trigger if exists c_stamp on public.punch_items;
+create trigger c_stamp before insert or update on public.punch_items for each row execute function public.stamp_server_updated_at();
+drop trigger if exists z_audit on public.punch_items;
+create trigger z_audit after insert or update on public.punch_items for each row execute function public.record_audit_trail();
 
 -- ---------------------------------------------------------------- photographs: private bucket, organization-scoped paths
 -- Object path convention: <org_id>/<photo_id>/original   and   <org_id>/<photo_id>/edited

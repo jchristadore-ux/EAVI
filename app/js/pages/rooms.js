@@ -8,10 +8,10 @@
   function statusChip(s) { return ui.chip(I.roomStatusLabel(s), I.ROOM_TONE[s]); }
   function roomRow(r, o) {
     o = o || {};
-    const s = I.roomStatus(r), n = I.roomAssets(r.id).length, pend = I.roomPending(r.id).length, lst = I.roomListed(r.id).length;
+    const s = I.roomStatus(r), n = I.roomAssets(r.id).length, pend = I.roomPending(r.id).length, lst = I.roomListed(r.id).length, punch = EV.punch.openCount(r.id);
     const f = o.where ? store.get('floors', r.floor_id) : null, b = o.where ? store.get('buildings', r.building_id) : null;
     return ui.row({ key: r.id, left: icon('grid', 17), title: [R.roomLabel(r) || 'Unnamed room', ui.demo(r)],
-      sub: [o.where ? [b && b.name, f && 'Floor ' + f.number].filter(Boolean).join(' · ') : '', r.department, U.plural(n, 'device'), lst ? lst + ' listed, not yet seen' : '', pend ? pend + ' awaiting review' : ''].filter(Boolean).join(' · '),
+      sub: [o.where ? [b && b.name, f && 'Floor ' + f.number].filter(Boolean).join(' · ') : '', r.department, U.plural(n, 'device'), lst ? lst + ' listed, not yet seen' : '', pend ? pend + ' awaiting review' : '', punch ? U.plural(punch, 'open punch item') : ''].filter(Boolean).join(' · '),
       right: statusChip(s), onclick: function () { EV.go('/rooms/room/' + r.id); } });
   }
   EV.inventoryRoomRow = roomRow;
@@ -164,10 +164,12 @@
     const toList = I.listingPlan(room).filter(function (i) { return i.create; });
     const nx = nextRoom(room);
     const last = I.roomLastDate(room);
+    const punchOpen = EV.punch.openCount(room.id);
     return [
       ui.head({ back: '/rooms/floor/' + room.floor_id, eyebrow: [b.name, f.number ? 'Floor ' + f.number : ''].filter(Boolean).join(' · '), title: [R.roomLabel(room) || 'Unnamed room', ui.demo(room)],
         sub: [room.department, room.code].filter(Boolean).join(' · '), chips: statusChip(s),
-        actions: [ui.btn('Room details', { sm: true, icon: 'edit', key: 'e', onclick: function () { editRoom(room); } })] }),
+        actions: [ui.btn('Room details', { sm: true, icon: 'edit', key: 'e', onclick: function () { editRoom(room); } }),
+          ui.btn(punchOpen ? 'Punch list · ' + punchOpen : 'Punch list', { sm: true, icon: 'flag', key: 'p', id: 'room-punch-jump', onclick: function () { const el = document.getElementById('room-punch'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); } })] }),
       h('section.add-device', null,
         ID.captureButton({ key: 'room-add-' + room.id, lg: true, block: true, label: '+ ADD DEVICE — photograph it', id: 'room-add-device',
           room: function () { return store.get('rooms', room.id); }, after: function (cap) { ID.open({ capture: cap.id }); } }),
@@ -187,6 +189,7 @@
         ui.label('Devices in this room', h('span.count', null, String(devs.length))),
         devs.length ? h('div.asset-list', null, devs.map(function (d) { return EV.assetRow(d); }))
           : ui.empty({ icon: 'camera', title: 'No devices recorded yet', text: 'Tap “Add device” and photograph the first one: front, then its label.' })),
+      EV.punch.section(room),
       h('section.stack', { id: 'room-details' },
         ui.label('Room details', ui.btn('Edit', { sm: true, kind: 'ghost', icon: 'edit', onclick: function () { editRoom(room); } })),
         h('div.kv-list', null,
