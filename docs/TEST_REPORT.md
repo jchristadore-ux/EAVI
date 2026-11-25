@@ -49,6 +49,14 @@ What was tested, how, with what result — and what was not. Date of this run: *
 > punch item placed, the missing one named, bookmarks), the web file (nothing loaded from outside, record text escaped,
 > the viewer, 390 px width) and the pages (read-only preview, downloads, export logged, no record changed). The
 > navigation and phone-layout tests now include the two new screens.
+> Checked on the live workspace the same day, in a signed-in browser on the deployed site: the Floor 20 report (5 rooms,
+> 71 devices, 173 photographs, 15 punch items) was generated as a PDF of 99 pages (24 MB, standard photograph quality,
+> about 2.5 minutes including downloading the photographs; 16 seconds once they were on the device) and checked in that
+> browser against the records: every cross-reference entry valid, 173 images embedded (one per photograph), all 943
+> stored device values shown, every device's photographs on its profile's page, every punch item in its room and in the
+> floor list, and the 6 photographs of 2 archived device records named in the report notes. That check found that the
+> per-device field table counted "not applicable" as recorded; it now shows value recorded, stated not applicable / not
+> accessible, and not recorded separately (test 82).
 >
 > **Later run, 24 November 2026 (punch list):** 81 tests; **81 pass**, and `tools/validate-outputs.ps1` opened the
 > punch list workbook in Excel without repair. The new test types three lines into a room's punch list, checks that

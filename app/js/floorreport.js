@@ -323,7 +323,8 @@
     const archivedDevices = store.all('devices').filter(function (d) { return d.archived && (d.floor_id === floor.id || roomIds.has(d.room_id)); })
       .sort(function (a, b) { return U.natCmp(a.code, b.code); })
       .map(function (d) { const rm = store.getAny('rooms', d.room_id); return { code: d.code, title: R.deviceLabel(d), room: rm ? R.roomLabel(rm) : '', photos: P.forDevice(d.id).map(function (p) { return p.code; }) }; });
-    const otherPhotos = store.by('photos', 'floor_id', floor.id).filter(function (p) { return !shownPhotos.has(p.id); }).map(function (p) {
+    const archivedIds = new Set(store.all('devices').filter(function (d) { return d.archived; }).map(function (d) { return d.id; }));
+    const otherPhotos = store.by('photos', 'floor_id', floor.id).filter(function (p) { return !shownPhotos.has(p.id) && !(p.device_id && archivedIds.has(p.device_id) && (store.getAny('devices', p.device_id).floor_id === floor.id || roomIds.has(store.getAny('devices', p.device_id).room_id))); }).map(function (p) {
       const d = p.device_id ? store.getAny('devices', p.device_id) : null;
       const why = d && d.archived ? 'photograph of archived device record ' + d.code : d && d.deleted_at ? 'photograph of deleted device record ' + d.code
         : d ? 'photograph of ' + d.code + ', which is not in a room on this floor' : p.room_id && !roomIds.has(p.room_id) ? 'photograph of a room that is archived or on another floor' : 'not linked to a room or device on this floor';
@@ -331,9 +332,13 @@
     });
     const seenAll = [].concat.apply([], roomModels.map(function (r) { return r.devices; }));
     const seenRecs = seenAll.map(function (d) { return store.get('devices', d.id); }).filter(Boolean);
+    /* per core field: how many devices have a value, how many have the auditor's statement that there is none to read
+       (not accessible / not applicable), and how many have nothing */
     const fieldUse = FR.deviceCatalogue().reduce(function (acc, g) { return acc.concat(g[1].filter(function (f) { return f.core && f.k !== 'code'; })); }, []).map(function (f) {
       const applies = f.k === 'switch_port' ? seenRecs.filter(EV.inv.portRequired) : seenRecs;
-      return { label: f.label, recorded: applies.filter(function (d) { return fieldValue('devices', d, f).recorded; }).length, of: applies.length, note: f.k === 'switch_port' ? 'devices with an IP address' : '' };
+      const vals = applies.map(function (d) { return fieldValue('devices', d, f); });
+      const value = vals.filter(function (v) { return v.recorded && !v.stated; }).length, stated = vals.filter(function (v) { return v.stated; }).length;
+      return { label: f.label, value: value, stated: stated, none: applies.length - value - stated, of: applies.length, note: f.k === 'switch_port' ? 'devices with an IP address' : '' };
     });
     const punchAll = allPunch;
     const sumStat = function (fn) { return U.sum(roomModels, fn); };
@@ -509,7 +514,7 @@
           H('div', null, H('div.fr-room-kicker', null, 'Room ' + (r.index + 1) + ' of ' + m.rooms.length + ' · ' + m.where), H('h2.fr-room-title', null, r.label), r.type ? H('div.fr-room-sub', null, r.type + (r.code ? ' · ' + r.code : '')) : null),
           pill('Inventory ' + r.invLabel.toLowerCase(), TONE[r.invStatus])),
         H('div.fr-stats.fr-stats-5', null,
-          stat(r.stats.devices, 'Devices recorded'), stat(r.stats.photos, 'Photographs'), stat(r.stats.ids.slots ? r.stats.ids.pct + '%' : '—', 'Identifiers captured', null, r.stats.ids.slots ? r.stats.ids.stated + ' of ' + r.stats.ids.slots : ''),
+          stat(r.stats.devices, 'Devices recorded'), stat(r.stats.photos, 'Photographs'), stat(r.stats.ids.slots ? r.stats.ids.pct + '%' : '—', 'Identifier fields completed', null, r.stats.ids.slots ? r.stats.ids.stated + ' of ' + r.stats.ids.slots + ' · ' + r.stats.ids.verified + ' verified' : ''),
           stat(r.stats.punchOpen, 'Punch items open', r.stats.punchOpen ? 'warn' : null), stat(r.stats.punchTotal - r.stats.punchOpen, 'Punch items resolved')),
         H('h3.fr-h3', null, 'Room details'),
         H('dl.fr-kv.fr-kv-2', null, r.fields.map(function (f) {
@@ -571,13 +576,13 @@
             H('table.fr-table.fr-table-mini', null, H('tbody', null, [['Internal AV support', t.punch.internal], ['AV integrator', t.punch.integrator], ['Not yet assigned', t.punch.unassigned]].map(function (x) { return H('tr', { key: x[0] }, H('td', null, x[0]), H('td.fr-num', null, String(x[1]))); }))))),
         H('h3.fr-h3', null, 'Information recorded per device'),
         H('div.fr-table-wrap', null, H('table.fr-table', null,
-          H('thead', null, H('tr', null, H('th', null, 'Field'), H('th.fr-num', null, 'Recorded'), H('th.fr-num', null, 'Of'), H('th.fr-num', null, 'Share'))),
-          H('tbody', null, m.fieldUse.map(function (f) { return H('tr', { key: f.label }, H('td', null, f.label + (f.note ? ' (' + f.note + ')' : '')), H('td.fr-num', null, String(f.recorded)), H('td.fr-num', null, String(f.of)), H('td.fr-num', null, f.of ? U.pct(f.recorded, f.of) + '%' : '—')); }))))),
+          H('thead', null, H('tr', null, H('th', null, 'Field'), H('th.fr-num', null, 'Value recorded'), H('th.fr-num', null, 'Stated not applicable / not accessible'), H('th.fr-num', null, 'Not recorded'), H('th.fr-num', null, 'Devices'))),
+          H('tbody', null, m.fieldUse.map(function (f) { return H('tr', { key: f.label }, H('td', null, f.label + (f.note ? ' (' + f.note + ')' : '')), H('td.fr-num', null, String(f.value)), H('td.fr-num', null, String(f.stated)), H('td.fr-num', null, String(f.none)), H('td.fr-num', null, String(f.of))); }))))),
       /* floor summary */
       H('section.fr-section', { id: (X.idp || '') + 'floor' },
         H('h2.fr-h2', null, 'Floor summary'),
         H('div.fr-table-wrap', null, H('table.fr-table', null,
-          H('thead', null, H('tr', null, ['Room', 'Room name', 'Type', 'Inventory', 'Devices', 'Photos', 'Identifiers captured', 'Punch items'].map(function (c, i) { return H('th', { key: 'h' + i }, c); }))),
+          H('thead', null, H('tr', null, ['Room', 'Room name', 'Type', 'Inventory', 'Devices', 'Photos', 'Identifier fields completed', 'Punch items'].map(function (c, i) { return H('th', { key: 'h' + i }, c); }))),
           H('tbody', null, m.rooms.map(function (r) {
             return H('tr', { key: r.id },
               H('td', null, H('a', X.roomLink(r), r.number || r.label)), H('td', { 'class': r.name ? null : 'fr-nr' }, r.name || NR), H('td', null, r.type || NR), H('td', null, pill(r.invLabel, TONE[r.invStatus])),
@@ -1115,9 +1120,7 @@
     h1('Executive overview');
     para(FR.WHAT, { size: 9.3, color: C.ink2, after: 10 });
     tiles([{ v: t.rooms, l: 'Rooms audited', s: t.roomsByStatus.complete + ' of ' + t.rooms + ' marked complete' }, { v: t.devices, l: 'AV devices identified', s: t.statuses.verified + ' manually verified' },
-      { v: t.ids.slots ? t.ids.pct + '%' : '—', l: 'Identifiers captured', s: t.ids.stated + ' of ' + t.ids.slots }, { v: t.photos.total, l: 'Photographs captured' },
-      { v: t.punch.total, l: 'Punch list items' }, { v: t.punch.open, l: 'Punch items open', tone: t.punch.open ? 'warn' : null }, { v: t.punch.resolved, l: 'Punch items resolved', tone: t.punch.resolved ? 'ok' : null },
-      { v: t.punch.unassigned, l: 'Punch items unassigned', s: 'no party chosen yet' }], 4);
+      { v: t.ids.slots ? t.ids.pct + '%' : '—', l: 'Identifier fields completed', s: t.ids.stated + ' of ' + t.ids.slots + ' · ' + t.ids.verified + ' verified' }, { v: t.photos.total, l: 'Photographs captured', s: t.photos.room + ' room · ' + t.photos.device + ' device' }], 4);
     h3('Condition and completeness of the collected information');
     bullets(FR.summary(m));
     h3('Punch list', null, 70);
@@ -1139,14 +1142,14 @@
       y += 4 * 17 + 14;
     }
     h3('Information recorded per device', null, 80);
-    table([{ l: 'Field', w: 3 }, { l: 'Recorded', w: 1, right: true }, { l: 'Of', w: 1, right: true }, { l: 'Share', w: 1, right: true }],
-      m.fieldUse.map(function (f) { return [f.label + (f.note ? ' (' + f.note + ')' : ''), String(f.recorded), String(f.of), f.of ? U.pct(f.recorded, f.of) + '%' : '—']; }));
+    table([{ l: 'Field', w: 3.2 }, { l: 'Value recorded', w: 1.1, right: true }, { l: 'Stated not applicable / not accessible', w: 1.7, right: true }, { l: 'Not recorded', w: 1.1, right: true }, { l: 'Devices', w: 0.9, right: true }],
+      m.fieldUse.map(function (f) { return [f.label + (f.note ? ' (' + f.note + ')' : ''), String(f.value), String(f.stated), String(f.none), String(f.of)]; }), { size: 7.6 });
     /* ---- floor summary */
     section = 'Floor summary'; newPage(); doc.bookmark('Floor summary', { y: y });
     h1('Floor summary');
     const pageCells = {};
     table([{ l: 'Room', w: 2.2 }, { l: 'Room name', w: 1.3 }, { l: 'Type', w: 1.6 }, { l: 'Inventory', w: 1.25 }, { l: 'Devices', w: 0.85, right: true }, { l: 'Photos', w: 0.8, right: true },
-      { l: 'Identifiers captured', w: 1.3, right: true }, { l: 'Punch items', w: 1.15, right: true }, { l: 'Page', w: 0.6, right: true }],
+      { l: 'Identifier fields completed', w: 1.3, right: true }, { l: 'Punch items', w: 1.15, right: true }, { l: 'Page', w: 0.6, right: true }],
       m.rooms.map(function (r) {
         return [{ t: r.number || r.label, bold: true }, r.name ? r.name : { t: NR, nr: true }, r.type || { t: NR, nr: true }, { t: r.invLabel, tone: TONE[r.invStatus] },
           String(r.devices.length) + (r.listed.length ? ' + ' + r.listed.length : ''), String(r.stats.photos), r.stats.ids.slots ? r.stats.ids.stated + '/' + r.stats.ids.slots + ' (' + r.stats.ids.pct + '%)' : '—',
@@ -1175,7 +1178,7 @@
       pill('Inventory ' + r.invLabel, ML + W - 14, y + 12, TONE[r.invStatus], { right: true, solid: true, size: 6.8 });
       y += bh + 15;
       tiles([{ v: r.stats.devices, l: 'Devices recorded', s: r.listed.length ? r.listed.length + ' listed, not yet seen' : r.stats.withPhoto + ' photographed' }, { v: r.stats.photos, l: 'Photographs', s: r.stats.roomPhotos + ' of the room' },
-        { v: r.stats.ids.slots ? r.stats.ids.pct + '%' : '—', l: 'Identifiers captured', s: r.stats.ids.slots ? r.stats.ids.stated + ' of ' + r.stats.ids.slots : '' },
+        { v: r.stats.ids.slots ? r.stats.ids.pct + '%' : '—', l: 'Identifier fields completed', s: r.stats.ids.slots ? r.stats.ids.stated + ' of ' + r.stats.ids.slots + ' · ' + r.stats.ids.verified + ' verified' : '' },
         { v: r.stats.punchOpen, l: 'Punch items open', tone: r.stats.punchOpen ? 'warn' : null }, { v: r.punch.length - r.stats.punchOpen, l: 'Punch items resolved', tone: r.punch.length - r.stats.punchOpen ? 'ok' : null }], 5);
       h3('Room details');
       facts(r.fields.concat([{ k: '_last', label: 'Last device activity', value: r.lastActivity ? dt(r.lastActivity) : NR, recorded: !!r.lastActivity }])
@@ -1218,14 +1221,14 @@
     tiles([{ v: t.punch.total, l: 'Total items' }, { v: t.punch.open, l: 'Open', tone: t.punch.open ? 'warn' : null }, { v: t.punch.resolved, l: 'Resolved', tone: t.punch.resolved ? 'ok' : null },
       { v: t.punch.internal, l: 'Internal AV support' }, { v: t.punch.integrator, l: 'AV integrator' }, { v: t.punch.unassigned, l: 'Not yet assigned' }], 6);
     para('Priority is not recorded for punch list items in EAVI, so none is shown. “To be resolved by” is the party that owns the item.', { size: 8.2, color: C.muted, after: 8 });
-    const pcols = [{ l: 'Room', w: 1.7 }, { l: 'Item', w: 1.05, mono: true }, { l: 'What needs to be put right', w: 3.6 }, { l: 'Related device', w: 1.8 }, { l: 'Status', w: 1.05 },
-      { l: 'To be resolved by', w: 1.35 }, { l: 'Date identified', w: 1.15 }];
+    const pcols = [{ l: 'Room', w: 1.6 }, { l: 'Item', w: 1.55, mono: true }, { l: 'What needs to be put right', w: 3.3 }, { l: 'Related device', w: 1.65 }, { l: 'Status', w: 1.0 },
+      { l: 'To be resolved by', w: 1.3 }, { l: 'Date identified', w: 1.1 }];
     const prow = function (p) { man.consolidated[p.code] = pg(); return [{ t: p.roomLabel, bold: true }, p.code, p.text, p.device || { t: '—', nr: true }, { t: p.status, tone: p.open ? 'warn' : 'ok' }, p.party, d1(p.added)]; };
     const openP = m.punch.filter(function (p) { return p.open; }), doneP = m.punch.filter(function (p) { return !p.open; });
     h3('Open items', String(openP.length), 60);
     if (openP.length) table(pcols, openP.map(function (p) { const row = prow(p); return row; }), { size: 7.4 }); else callout('No open punch list items are recorded on this floor.');
-    h3('Resolved items', String(doneP.length), 60);
-    if (doneP.length) table(pcols, doneP.map(prow), { size: 7.4 }); else para('No resolved punch list items are recorded on this floor.', { size: 8.5, color: C.muted });
+    if (doneP.length) { h3('Resolved items', String(doneP.length), 60); table(pcols, doneP.map(prow), { size: 7.4 }); }
+    else para('Resolved items: none are recorded on this floor.', { size: 8.5, color: C.muted });
     /* ---- notes */
     section = 'Report notes'; newPage(); doc.bookmark('Report notes', { y: y });
     h1('Report notes');

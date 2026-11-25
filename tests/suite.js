@@ -2681,9 +2681,13 @@
     eq(m.floorPhotos.map(function (p) { return p.id; }), [x.pFloor.id], 'the photograph of the floor');
     const ids = FRP.photoIds(m);
     const onFloor = store.by('photos', 'floor_id', x.f.id).map(function (p) { return p.id; });
-    onFloor.forEach(function (id) { assert(ids.indexOf(id) >= 0 || m.excluded.otherPhotos.some(function (o) { return o.code === store.get('photos', id).code; }), 'photograph ' + store.get('photos', id).code + ' is shown or named'); });
-    assert(m.excluded.otherPhotos.some(function (o) { return o.code === x.pGone.code && /archived device record/.test(o.reason); }), 'the archived device\'s photograph is named, not dropped');
-    eq(m.excluded.archivedDevices.map(function (d) { return d.code; }), [x.gone.code]);
+    const named = [].concat.apply(m.excluded.otherPhotos.map(function (o) { return o.code; }), m.excluded.archivedDevices.map(function (d) { return d.photos; }));
+    onFloor.forEach(function (id) { assert(ids.indexOf(id) >= 0 || named.indexOf(store.get('photos', id).code) >= 0, 'photograph ' + store.get('photos', id).code + ' is shown or named'); });
+    eq([m.excluded.archivedDevices.map(function (d) { return d.code; }), m.excluded.archivedDevices[0].photos], [[x.gone.code], [x.pGone.code]], 'the archived device and its photograph are named, not dropped');
+    assert(!m.excluded.otherPhotos.some(function (o) { return o.code === x.pGone.code; }), 'and named once');
+    const fu = function (label) { return m.fieldUse.find(function (z) { return z.label === label; }); };
+    eq([fu('IP address').value, fu('IP address').stated, fu('IP address').none, fu('IP address').of], [1, 1, 1, 3], 'IP: one value, one stated not applicable, one not recorded');
+    eq([fu('Serial number').value, fu('Serial number').stated, fu('Switch port ID').of], [1, 1, 1], 'serial: a stated "not accessible" is not a value; the port counts only devices with an IP');
     /* punch lists: room by room, and the floor's list is exactly theirs */
     eq(rA.punch.map(function (p) { return p.code; }), EV.punch.forRoom(x.rA.id).map(function (p) { return p.code; }));
     eq(m.punch.map(function (p) { return p.code; }), [].concat.apply([], m.rooms.map(function (r) { return r.punch.map(function (p) { return p.code; }); })), 'the consolidated list is the rooms\' lists');
