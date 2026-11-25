@@ -885,6 +885,16 @@
       }
       y += 4;
     }
+    /* the height a table will take, so a short one can be kept on one page together with its heading */
+    function tableHeight(cols, rows, o2) {
+      o2 = o2 || {};
+      const size = o2.size || 7.8, lh = size * 1.32, pad = 4.5;
+      const tot = U.sum(cols, function (c) { return c.w; }), cw = cols.map(function (c) { return c.w / tot * W; });
+      const hh = Math.max.apply(null, cols.map(function (c, i) { return wrap(c.l, 'bold', size, cw[i] - pad * 2).length; })) * lh + 8;
+      return hh + U.sum(rows, function (r) {
+        return Math.max.apply(null, r.map(function (v, i) { const t = v && typeof v === 'object' ? v.t : v; return wrap(t == null ? '' : String(t), cols[i].mono ? 'mono' : 'regular', size, cw[i] - pad * 2).length; })) * lh + 7;
+      }) + 10;
+    }
     /* cols: [{ l, w (share), mono, right }]; a cell is a string or { t, tone, nr, bold, onDraw(x, y, page) } */
     function table(cols, rows, o2) {
       o2 = o2 || {};
@@ -1141,9 +1151,13 @@
       });
       y += 4 * 17 + 14;
     }
-    h3('Information recorded per device', null, 80);
-    table([{ l: 'Field', w: 3.2 }, { l: 'Value recorded', w: 1.1, right: true }, { l: 'Stated not applicable / not accessible', w: 1.7, right: true }, { l: 'Not recorded', w: 1.1, right: true }, { l: 'Devices', w: 0.9, right: true }],
-      m.fieldUse.map(function (f) { return [f.label + (f.note ? ' (' + f.note + ')' : ''), String(f.value), String(f.stated), String(f.none), String(f.of)]; }), { size: 7.6 });
+    {
+      const fc = [{ l: 'Field', w: 3.2 }, { l: 'Value recorded', w: 1.1, right: true }, { l: 'Stated not applicable / not accessible', w: 1.7, right: true }, { l: 'Not recorded', w: 1.1, right: true }, { l: 'Devices', w: 0.9, right: true }];
+      const fr = m.fieldUse.map(function (f) { return [f.label + (f.note ? ' (' + f.note + ')' : ''), String(f.value), String(f.stated), String(f.none), String(f.of)]; });
+      /* a short table stays whole, with its heading, rather than being split over two pages */
+      h3('Information recorded per device', null, Math.min(tableHeight(fc, fr, { size: 7.6 }), (BOTTOM - TOP) * 0.6));
+      table(fc, fr, { size: 7.6 });
+    }
     /* ---- floor summary */
     section = 'Floor summary'; newPage(); doc.bookmark('Floor summary', { y: y });
     h1('Floor summary');
