@@ -24,6 +24,8 @@ Version 1.0.0 · 12 November 2026
 | Room Inventory | Building → floor → room; one tap opens the camera to add a device; mark the room complete, go to the next room |
 | Identify Devices | Photographs (front, rear, label, ports), optional AI identification through the workspace (no key in the browser; off until authorized), review and confirm; crop; barcode reading where the browser supports it |
 | Asset Registry | Every confirmed device with the source of each value, verification status, search and filters, bulk actions, duplicate detection and field-by-field merge |
+| Punch List | Items to put right in each room, typed one per line with who resolves them; resolved / open; Excel and CSV export room by room |
+| Floor Reports | A shareable audit report for one floor (proof of concept): read-only preview, PDF, and a self-contained web report with every room, device, photograph and punch item |
 | Export & Integration | CSV, Excel and JSON by any scope, field mapping to the portal's columns, preview, validation report, export history; exported assets know when they have changed since |
 | *Legacy:* Command Center | Figures computed from the records: audit progress, incomplete device identification, open backlog by priority, outstanding requests, alerts and suggestions |
 | Buildings & Floors | Organization → Building → Floor → Area → Room → Rack → Device, including divisible rooms audited as a combined configuration |

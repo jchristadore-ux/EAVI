@@ -1,6 +1,7 @@
 /* pdf.js — dependency-free PDF 1.4 writer.
  * Standard Type 1 fonts (Helvetica family, Courier) with WinAnsi encoding and real AFM advance widths for wrapping,
- * vector rules and fills, and JPEG (DCTDecode) images. Coordinates are in points with a top-left origin. */
+ * vector rules and fills, JPEG (DCTDecode) images and an optional outline (bookmarks). Coordinates are in points with a
+ * top-left origin. */
 (function () {
   'use strict';
   const EV = window.EV;
@@ -73,12 +74,21 @@
       const PW = opts.landscape ? 792 : 612, PH = opts.landscape ? 612 : 792;
       const pages = [];
       const images = [];
+      const marks = [];   /* outline entries: { title, page, y, parent } (parent: index of another entry, or -1) */
       let cur = null;
       const doc = {
         width: PW, height: PH,
         page: function () { cur = { ops: [], images: new Set() }; pages.push(cur); return pages.length - 1; },
         pageCount: function () { return pages.length; },
         setPage: function (i) { cur = pages[i]; },
+        /* An outline entry (bookmark) pointing at y on the current page; o.parent nests it under an earlier entry.
+           Returns its index. */
+        bookmark: function (title, o) {
+          o = o || {};
+          if (!pages.length) doc.page();
+          marks.push({ title: String(title == null ? '' : title), page: pages.indexOf(cur), y: o.y || 0, parent: o.parent == null ? -1 : o.parent });
+          return marks.length - 1;
+        },
         textWidth: function (str, font, size) { return widthOf(encode(str), font || 'regular', size || 10); },
         /* Greedy word wrap; returns an array of lines (unencoded strings). */
         wrap: function (str, font, size, maxW) {
@@ -142,15 +152,16 @@
           const push = function (u) { chunks.push(u); offset += u.length; };
           const pushS = function (s) { push(bytes(s)); };
           const nPages = pages.length;
-          /* object ids: 1 catalog · 2 pages · 3–6 fonts · then images · then (page, content) pairs · info */
+          /* object ids: 1 catalog · 2 pages · 3–6 fonts · then images · then (page, content) pairs · info · outline root and entries */
           const firstImage = 7;
           const firstPage = firstImage + images.length;
           const infoId = firstPage + nPages * 2;
-          const total = infoId;
+          const outlineId = marks.length ? infoId + 1 : 0;
+          const total = infoId + (marks.length ? 1 + marks.length : 0);
           const begin = function (id) { xref[id] = offset; pushS(id + ' 0 obj\n'); };
           const end = function () { pushS('\nendobj\n'); };
           pushS('%PDF-1.4\n%\xE2\xE3\xCF\xD3\n');
-          begin(1); pushS('<< /Type /Catalog /Pages 2 0 R >>'); end();
+          begin(1); pushS('<< /Type /Catalog /Pages 2 0 R' + (outlineId ? ' /Outlines ' + outlineId + ' 0 R /PageMode /UseOutlines' : '') + ' >>'); end();
           const kids = [];
           for (let i = 0; i < nPages; i++) kids.push((firstPage + i * 2) + ' 0 R');
           begin(2); pushS('<< /Type /Pages /Kids [' + kids.join(' ') + '] /Count ' + nPages + ' >>'); end();
@@ -180,6 +191,23 @@
           pushS('<< /Title ' + pdfText(opts.title || 'Report') + ' /Author ' + pdfText(opts.author || '') + ' /Creator ' + pdfString(encode('AV Environment Intelligence')) +
             ' /Producer ' + pdfString(encode('AV Environment Intelligence ' + EV.APP.version)) + ' /CreationDate (' + stamp + ') >>');
           end();
+          if (outlineId) {
+            /* every entry is shown open: an entry's /Count is the number of entries below it */
+            const kidsOf = function (p) { const out = []; marks.forEach(function (m, i) { if (m.parent === p) out.push(i); }); return out; };
+            const below = function (i) { return kidsOf(i).reduce(function (n, k) { return n + 1 + below(k); }, 0); };
+            const top = kidsOf(-1);
+            begin(outlineId); pushS('<< /Type /Outlines /First ' + (outlineId + 1 + top[0]) + ' 0 R /Last ' + (outlineId + 1 + top[top.length - 1]) + ' 0 R /Count ' + marks.length + ' >>'); end();
+            marks.forEach(function (m, i) {
+              const sib = kidsOf(m.parent), at = sib.indexOf(i), kids = kidsOf(i);
+              const pg = Math.max(0, Math.min(nPages - 1, m.page));
+              let d = '<< /Title ' + pdfText(m.title) + ' /Parent ' + (m.parent < 0 ? outlineId : outlineId + 1 + m.parent) + ' 0 R';
+              if (at > 0) d += ' /Prev ' + (outlineId + 1 + sib[at - 1]) + ' 0 R';
+              if (at < sib.length - 1) d += ' /Next ' + (outlineId + 1 + sib[at + 1]) + ' 0 R';
+              if (kids.length) d += ' /First ' + (outlineId + 1 + kids[0]) + ' 0 R /Last ' + (outlineId + 1 + kids[kids.length - 1]) + ' 0 R /Count ' + below(i);
+              d += ' /Dest [' + (firstPage + pg * 2) + ' 0 R /XYZ 0 ' + num(PH - m.y) + ' 0] >>';
+              begin(outlineId + 1 + i); pushS(d); end();
+            });
+          }
           const xrefPos = offset;
           let x = 'xref\n0 ' + (total + 1) + '\n0000000000 65535 f \n';
           for (let i = 1; i <= total; i++) x += ('0000000000' + xref[i]).slice(-10) + ' 00000 n \n';

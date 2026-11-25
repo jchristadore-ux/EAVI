@@ -56,7 +56,8 @@
     const t = I.tally(rooms);
     const shown = rooms.filter(function (x) { const s = I.roomStatus(x); return st.show === 'all' || (st.show === 'not_started' ? s === '' : s === st.show); });
     return [
-      ui.head({ back: '/rooms', eyebrow: b.name, title: 'Floor ' + f.number, sub: f.designation }),
+      ui.head({ back: '/rooms', eyebrow: b.name, title: 'Floor ' + f.number, sub: f.designation,
+        actions: [ui.btn('Floor report', { key: 'fr', icon: 'file', id: 'floor-report', onclick: function () { EV.go('/floor-report/' + f.id); } })] }),
       ui.card({ key: 'prog' }, EV.inventoryBar(t), h('div.floor-counts', null, EV.inventoryCounts(t))),
       ui.seg(st.show, [['all', 'All (' + rooms.length + ')'], ['not_started', 'Not started (' + t.not_started + ')'], ['in_progress', 'In progress (' + t.in_progress + ')'], ['complete', 'Complete (' + t.complete + ')']],
         { wrap: true, onchange: function (v) { st.show = v; } }),

@@ -75,6 +75,45 @@ What needs to be put right in a room, recorded while its hardware is documented,
   `device_id`, `text`, `resolver` (`internal`, `integrator` or empty = not assigned), `status` (`open` or
   `resolved`), `notes`, `resolved_at`, `resolved_by`. It synchronises like every other table. It is not part of the
   legacy daily export package.
+## 1c. Floor report (proof of concept)
+
+One shareable audit report per floor, built from the records on the device that generates it. **Floor Reports** in the
+navigation lists every floor; **Floor report** in a floor's header (Room Inventory → a floor) opens that floor's report.
+
+- **Preview** (`/floor-report/<floor id>`): read-only; nothing on the page changes a record. Photographs show as
+  thumbnails and open full size in the photograph viewer. **Copy link** copies the page's address: it opens for people
+  signed in to the same workspace (row-level security decides what they see) and shows the records as they are then.
+- **Download PDF**: Letter, portrait. Cover (marked *Proof of Concept*), executive overview, floor summary with each
+  room's page number, one section per room starting on a new page, the consolidated punch list, report notes; page
+  numbers, report title and section in the header, a confidentiality line in the footer; bookmarks for every section
+  and room. A device profile (every field beside its photographs) is kept on one page whenever it fits on one.
+- **Download web report**: one HTML file with its styles, script and every photograph inside it. Its own
+  Content-Security-Policy lets it load nothing and connect nowhere; it needs no sign-in. Room menu (sidebar on a
+  desktop, *Go to…* on a phone), every picture opens full size (arrow keys and Esc work), prints one room per page.
+- **Photograph quality** for both files: *Standard* (long edge 1,280 px, JPEG 0.80) keeps a floor small enough to send;
+  *High* (2,048 px, 0.86) keeps more detail. Originals are never changed. A photograph whose image file cannot be loaded
+  (not on the device and not reachable in the workspace) is shown as *Image file not available* with its ID and listed
+  in the report notes; no other picture takes its place.
+
+What is in it, room by room: the room's recorded details (every room column; empty core ones as *Not recorded*, the
+other empty ones named in one *Also not recorded* line), last device activity and any legacy audit records; all its
+photographs; a device table and one profile per device with **every column of the device record** — grouped as
+Identification, Network, Location, Power, Configuration, Lifecycle, Record and Notes, identifiers with their
+verification status, the verification status EAVI derives — and the device's own photographs, its chosen room-list
+picture first. A column added to `devices` later is shown under *Other recorded fields* without a code change (a test
+adds one). Equipment listed from the room details but not yet seen, and device captures still awaiting review (with
+their photographs), have their own short sections. Then the room's punch list (every item with status, who resolves it,
+related device, date identified, who added it, when and by whom it was resolved, notes), or *No punchlist items
+currently recorded for this room.*
+
+Report notes name what is not in the report and why: archived rooms, archived device records and their photographs,
+any other photograph on the floor not linked to a room or device shown; and the fields the data model does not have,
+decided from `schema.js` (punch list priority, category, corrective action, a named owner and photographs; device
+condition; a general configuration field). Nothing is assigned or inferred to fill them.
+
+Generating a report reads records only. Photographs not yet on the device are downloaded from the workspace and kept
+on the device, as when they are opened in the viewer. Each saved file is recorded in the change history.
+
 ## 2. The asset record
 
 An asset is a row of the existing `devices` table, so the legacy screens keep working on the same records. Its
@@ -205,6 +244,8 @@ merged record is deleted and kept in the history.
 | `app/js/pages/inventory.js` | Inventory Dashboard |
 | `app/js/pages/rooms.js` | Room Inventory and the room workspace; `EV.assetRow` |
 | `app/js/punch.js` | `EV.punch`: punch list records, the room's punch list section, the Punch List page and its export |
+| `app/js/floorreport.js` | `EV.floorReport`: the floor report model (`build`), its body for the preview and the web page, the PDF and the web page renderers |
+| `app/js/pages/floorreport.js` | Floor Reports: the floor list and the report page (preview, Download PDF / web report, Copy link) |
 | `app/js/pages/assets.js` | Asset Registry, the asset record, Compare and merge, Identify Devices |
 | `app/js/pages/integration.js` | `EV.assetExport`: mappings, validation, CSV / Excel / JSON, export history |
 | `supabase/functions/identify-device/` | Server-side AI identification (not yet run) |

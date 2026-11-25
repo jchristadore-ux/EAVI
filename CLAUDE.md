@@ -126,6 +126,16 @@ powershell -ExecutionPolicy Bypass -File tools\validate-outputs.ps1   # check th
   rooms, 122 devices, 2 buildings and 253 photos were unchanged). Not in the legacy daily export package.
 - 81 tests pass (`docs/TEST_REPORT.md`). Not tried on a real phone.
 
+## Floor report (25 November 2026)
+
+- *Floor Reports* in the navigation, or *Floor report* on a floor (Room Inventory): a read-only preview of one floor's
+  audit report and two downloads, a PDF and a self-contained web report (one HTML file, photographs inside, loads
+  nothing from outside). Marked *Proof of Concept*. Code in `app/js/floorreport.js` and `app/js/pages/floorreport.js`;
+  reference in `docs/INVENTORY.md` section 1c. No schema change.
+- `pdf.js` gained bookmarks (`doc.bookmark`); `photos.js` `jpegFor` takes a JPEG quality and scales with high-quality
+  smoothing. The preview's styles in `app.css` are the web report's (`FR.WEB_CSS`) scoped to `.fr-paper`: change both.
+- 85 tests pass (`docs/TEST_REPORT.md`), run in headless Chrome on Linux; `validate-outputs.ps1` not run for this change.
+
 ## Open items, in priority order
 
 1. Hosting is decided (owner, 12 November 2026): a **public** GitHub Pages site is acceptable for the application

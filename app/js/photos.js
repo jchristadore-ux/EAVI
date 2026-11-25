@@ -25,6 +25,7 @@
     const c = document.createElement('canvas');
     c.width = turns % 2 ? dh : dw; c.height = turns % 2 ? dw : dh;
     const ctx = c.getContext('2d');
+    ctx.imageSmoothingQuality = 'high';   /* camera originals are reduced many times over: smooth, not nearest-pixel */
     ctx.translate(c.width / 2, c.height / 2);
     ctx.rotate(turns * Math.PI / 2);
     ctx.drawImage(img, -dw / 2, -dh / 2, dw, dh);
@@ -158,8 +159,8 @@
     const ext = mime.indexOf('png') >= 0 ? 'png' : mime.indexOf('webp') >= 0 ? 'webp' : mime.indexOf('heic') >= 0 ? 'heic' : mime.indexOf('gif') >= 0 ? 'gif' : 'jpg';
     return { bytes: new Uint8Array(await readBuffer(blob)), ext: ext, mime: mime };
   };
-  /* JPEG rendition for PDF embedding (max edge px). Returns {bytes, width, height} or null. */
-  P.jpegFor = async function (photo, maxEdge) {
+  /* JPEG rendition for PDF embedding (max edge px; quality 0–1, default 0.8). Returns {bytes, width, height} or null. */
+  P.jpegFor = async function (photo, maxEdge, quality) {
     const blob = await P.getBlob(photo, false);
     if (!blob) return null;
     try {
@@ -169,7 +170,7 @@
         /* flatten onto white so transparent PNGs do not render black */
         const flat = document.createElement('canvas'); flat.width = c.width; flat.height = c.height;
         const ctx = flat.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, flat.width, flat.height); ctx.drawImage(c, 0, 0);
-        const out = await canvasBlob(flat, 'image/jpeg', 0.8);
+        const out = await canvasBlob(flat, 'image/jpeg', quality || 0.8);
         return { bytes: new Uint8Array(await readBuffer(out)), width: flat.width, height: flat.height };
       } finally { URL.revokeObjectURL(li.url); }
     } catch (e) { return null; }

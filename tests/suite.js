@@ -1285,7 +1285,8 @@
       const routes = ['/', '/environment', '/floor/' + f22.id, '/room/' + a22B.room_id, '/audits', '/audit/' + a22B.id, '/devices', '/devices?filter=incomplete', '/infrastructure', '/infrastructure?tab=switches',
         '/infrastructure?tab=addressing', '/infrastructure?tab=dependencies', '/infrastructure?tab=validation', '/backlog', '/backlog?tab=triage', '/backlog/' + ctx.bl1.id, '/coordination', '/spares', '/reports',
         '/reports/executive', '/reports/room?audit=' + a22B.id, '/reports/devices', '/reports/network', '/export', '/settings',
-        '/legacy', '/rooms', '/rooms/floor/' + f22.id, '/rooms/room/' + a22B.room_id, '/identify', '/assets', '/assets?tab=review', '/assets?tab=duplicates', '/integration', '/punch'];
+        '/legacy', '/rooms', '/rooms/floor/' + f22.id, '/rooms/room/' + a22B.room_id, '/identify', '/assets', '/assets?tab=review', '/assets?tab=duplicates', '/integration', '/punch',
+        '/floor-report', '/floor-report/' + f22.id];
       /* one-handed use: every control that is tapped is at least 44 px in both directions. A switch, a text link and a
          tappable chip keep their look and carry a 44 px touch area around them instead. */
       let controls = 0;
@@ -2196,7 +2197,7 @@
     EV.go('/'); await wait(150);
     assert(document.querySelector('.page-inventory') && /Inventory Dashboard/.test(document.querySelector('.page-title').textContent), 'the dashboard is the start page');
     const nav = Array.prototype.map.call(document.querySelectorAll('.sidebar .nav-item'), function (a) { return a.textContent.trim().replace(/\d+$/, ''); });
-    eq(nav.slice(0, 7), ['Inventory Dashboard', 'Room Inventory', 'Punch List', 'Identify Devices', 'Asset Registry', 'Export & Integration', 'Settings']);
+    eq(nav.slice(0, 8), ['Inventory Dashboard', 'Room Inventory', 'Punch List', 'Floor Reports', 'Identify Devices', 'Asset Registry', 'Export & Integration', 'Settings']);
     assert(nav.indexOf('Room Audits') < 0 && nav.some(function (n) { return /^Legacy Command Center/.test(n); }), 'legacy sections are behind one link');
     for (const n of EV.NAV) {
       EV.go(n.path); await wait(80);
@@ -2207,7 +2208,7 @@
     assert(Array.prototype.some.call(document.querySelectorAll('.sidebar .nav-item'), function (a) { return /Room Audits/.test(a.textContent); }), 'the setting shows them everywhere');
     store.kvSet('show_legacy', false);
     const room = store.get('rooms', store.get('devices', ctx.invA).room_id);
-    for (const p of ['/', '/rooms', '/rooms/floor/' + room.floor_id, '/rooms/room/' + room.id, '/identify', '/assets', '/assets?tab=review', '/assets?tab=duplicates', '/assets?filter=missing_mac', '/integration', '/punch', '/settings']) {
+    for (const p of ['/', '/rooms', '/rooms/floor/' + room.floor_id, '/rooms/room/' + room.id, '/identify', '/assets', '/assets?tab=review', '/assets?tab=duplicates', '/assets?filter=missing_mac', '/integration', '/punch', '/floor-report', '/floor-report/' + room.floor_id, '/settings']) {
       EV.go(p); await wait(100);
       assert(!document.querySelector('.crash') && !/Page not found/.test(document.querySelector('.page-title').textContent), p + ' renders');
     }
@@ -2626,6 +2627,195 @@
     /* deleting removes it from every list (a soft delete, kept in history) */
     EV.act.remove('punch_items', items[3].id);
     eq([PL.forRoom(room.id).length, !!store.getAny('punch_items', items[3].id).deleted_at], [3, true]);
+    EV.go('/'); await wait(50);
+  });
+  /* ------------------------------------------------------------------ floor report */
+  const FRP = EV.floorReport;
+  /* a floor of its own: three rooms (one left empty), devices with and without photographs, a listed item, a capture
+     awaiting review, an archived device, a photograph whose image file is gone, a floor photograph and punch items */
+  async function reportFloor() {
+    if (ctx.rep) return ctx.rep;
+    const b = store.create('buildings', { name: 'Report Test Tower', address: '1 Report Way', identifier: 'RTT', floors_count: null, site_contact: '', notes: '', archived: false });
+    const f = store.create('floors', { building_id: b.id, number: '20', designation: 'Report test level', infrastructure_notes: '', audit_status_override: '', sort_order: 20, archived: false });
+    const rB = A.addRoom(f, { number: 'R-10', name: 'Second room', department: '' });
+    const rA = A.addRoom(f, { number: 'R-2', name: '', department: 'Trading' });
+    const rC = A.addRoom(f, { number: 'R-30', name: 'Empty room', department: '' });
+    store.update('rooms', rA.id, { room_type: 'Huddle room', notes: 'Rack behind the credenza' });
+    const cam = I.create(rA, { category: 'Camera', manufacturer: 'Sony', model: 'SRG-X400', serial_number: 'SN-REP-1', serial_status: 'verified_onsite', ip_address: '192.0.2.50', mac_address: '00:00:5E:00:53:50', mac_status: 'not_applicable', switch_port: '' }, null, { confirm: true });
+    const disp = I.create(rA, { category: 'Display', manufacturer: 'Samsung', model: 'QM55R', ip_status: 'not_applicable', mac_status: 'not_applicable', serial_status: 'unavailable', vlan: 'AV-120', notes: 'Wall mount' });
+    const bar = I.create(rB, { category: 'Room collaboration system', manufacturer: 'Neat', model: 'Bar Pro' });
+    const listed = I.create(rB, { category: 'Microphone endpoint', manufacturer: 'Shure', model: 'MXA920', presence: 'listed', listed_text: 'Shure MXA920 (x1)' });
+    const gone = I.create(rA, { category: 'Touch panel', manufacturer: 'Crestron', model: 'TSW-770' });
+    const p1 = (await EV.photos.ingest([await imageFile('camera front')], { room: rA, device_id: cam.id, category: 'Device front' }))[0];
+    const p2 = (await EV.photos.ingest([await imageFile('camera label', '#432')], { room: rA, device_id: cam.id, category: 'Equipment labels', description: 'Serial label' }))[0];
+    const p3 = (await EV.photos.ingest([await imageFile('room A wide', '#243')], { room: rA, category: 'Room overview' }))[0];
+    const p4 = (await EV.photos.ingest([await imageFile('bar front', '#334')], { room: rB, device_id: bar.id, category: 'Device front' }))[0];
+    const pGone = (await EV.photos.ingest([await imageFile('panel', '#555')], { room: rA, device_id: gone.id, category: 'Device front' }))[0];
+    const pFloor = (await EV.photos.ingest([await imageFile('floor plan', '#122')], { floor_id: f.id, building_id: b.id, category: 'Other', description: 'Floor plan on the wall' }))[0];
+    const pLost = (await EV.photos.ingest([await imageFile('lost file', '#511')], { room: rB, category: 'Room overview' }))[0];
+    await store.blobDelete(pLost.id);   /* its image file is no longer on this device */
+    store.update('devices', gone.id, { archived: true });
+    const cap = ID.newCapture(rB);
+    const pCap = (await ID.addPhotos(cap, [await imageFile('unconfirmed', '#262')], 'front'))[0];
+    const items = EV.punch.add(rA, 'Camera preset 1 frames the wall\n<img src=x onerror=alert(1)> label missing', 'integrator');
+    EV.punch.add(rB, 'Bar firmware out of date', '');
+    EV.punch.setStatus(items[0], 'resolved');
+    store.update('punch_items', items[1].id, { device_id: disp.id, notes: 'Reprint the label' });
+    ctx.rep = { b: b, f: f, rA: rA, rB: rB, rC: rC, cam: cam, disp: disp, bar: bar, listed: listed, gone: gone, p1: p1, p2: p2, p3: p3, p4: p4, pGone: pGone, pFloor: pFloor, pLost: pLost, cap: cap, pCap: pCap, items: items };
+    return ctx.rep;
+  }
+  test('floor report: every room, device, photograph and punch list item of the floor is in it, room by room; nothing is invented; a field added to the data model later is still shown', async function () {
+    const x = await reportFloor();
+    const m = FRP.build(x.f.id);
+    eq(m.rooms.map(function (r) { return r.number; }), ['R-2', 'R-10', 'R-30'], 'every room of the floor, in natural order');
+    eq([m.title, m.building, m.floorLabel], ['Floor 20 — AV Environment Audit', 'Report Test Tower', 'Floor 20']);
+    const rA = m.rooms[0], rB = m.rooms[1], rC = m.rooms[2];
+    eq(rA.devices.map(function (d) { return d.code; }).sort(), [x.cam.code, x.disp.code].sort(), 'the room\'s devices, and not the archived one');
+    eq([rB.devices.length, rB.listed.map(function (d) { return d.code; }), rB.pending.length, rC.devices.length, rC.punch.length], [1, [x.listed.code], 1, 0, 0]);
+    /* photographs: each with its own record, the main one first, never another device's */
+    const cam = rA.devices.find(function (d) { return d.code === x.cam.code; });
+    eq(cam.photos.map(function (p) { return p.id; }).sort(), [x.p1.id, x.p2.id].sort(), 'the camera has its two photographs');
+    eq(rA.devices.find(function (d) { return d.code === x.disp.code; }).photos.length, 0, 'a device without photographs gets none');
+    eq(rA.photos.map(function (p) { return p.id; }), [x.p3.id], 'the room photograph');
+    eq(rB.pending[0].photos.map(function (p) { return p.id; }), [x.pCap.id], 'the photograph of a capture awaiting review');
+    eq(m.floorPhotos.map(function (p) { return p.id; }), [x.pFloor.id], 'the photograph of the floor');
+    const ids = FRP.photoIds(m);
+    const onFloor = store.by('photos', 'floor_id', x.f.id).map(function (p) { return p.id; });
+    onFloor.forEach(function (id) { assert(ids.indexOf(id) >= 0 || m.excluded.otherPhotos.some(function (o) { return o.code === store.get('photos', id).code; }), 'photograph ' + store.get('photos', id).code + ' is shown or named'); });
+    assert(m.excluded.otherPhotos.some(function (o) { return o.code === x.pGone.code && /archived device record/.test(o.reason); }), 'the archived device\'s photograph is named, not dropped');
+    eq(m.excluded.archivedDevices.map(function (d) { return d.code; }), [x.gone.code]);
+    /* punch lists: room by room, and the floor's list is exactly theirs */
+    eq(rA.punch.map(function (p) { return p.code; }), EV.punch.forRoom(x.rA.id).map(function (p) { return p.code; }));
+    eq(m.punch.map(function (p) { return p.code; }), [].concat.apply([], m.rooms.map(function (r) { return r.punch.map(function (p) { return p.code; }); })), 'the consolidated list is the rooms\' lists');
+    eq([m.totals.punch.total, m.totals.punch.open, m.totals.punch.resolved, m.totals.punch.integrator, m.totals.punch.unassigned], [3, 2, 1, 2, 1]);
+    const pd = rA.punch.find(function (p) { return /label missing/.test(p.text); });
+    eq([pd.device.indexOf(x.disp.code), pd.party, pd.notes, pd.open], [0, 'AV integrator', 'Reprint the label', true]);
+    /* fields: values as recorded, with their status; empty core fields say so; nothing is filled in */
+    const f = function (d, k) { return d.fields.find(function (z) { return z.k === k; }); };
+    eq([f(cam, 'serial_number').value, f(cam, 'serial_number').note], ['SN-REP-1', 'Verified onsite']);
+    eq([f(cam, 'ip_address').value, f(cam, 'ip_address').note], ['192.0.2.50', 'Captured — not verified']);
+    eq(f(cam, 'mac_address').value, '00:00:5E:00:53:50');
+    eq([f(cam, 'switch_port').value, f(cam, 'switch_port').recorded], [FRP.NOT_RECORDED, false], 'an empty core field is shown as Not recorded');
+    eq([f(cam, 'hostname').value, f(cam, 'asset_tag').value, f(cam, 'vlan').value], [FRP.NOT_RECORDED, FRP.NOT_RECORDED, FRP.NOT_RECORDED]);
+    const disp = rA.devices.find(function (d) { return d.code === x.disp.code; });
+    eq([f(disp, 'serial_number').value, f(disp, 'ip_address').value, f(disp, 'vlan').value, f(disp, 'notes').value], ['Not accessible / unavailable', 'Not applicable', 'AV-120', 'Wall mount'], 'stated values are the auditor\'s statements');
+    assert(cam.missing.indexOf('Subnet') >= 0 && cam.missing.indexOf('Merged into') < 0, 'other empty fields are named, events that did not happen are not');
+    cam.fields.forEach(function (z) {
+      if (!z.recorded || z.derived || /_at$|_id$|^presence$|^field_sources$|^category$/.test(z.k)) return;
+      assert(String(z.value).indexOf(String(store.get('devices', cam.id)[z.k]).trim()) === 0, z.label + ' shows the stored value, not another: ' + z.value);
+    });
+    eq(rA.fields.find(function (z) { return z.k === 'name'; }).value, FRP.NOT_RECORDED, 'a room without a name says so');
+    eq(rA.fields.find(function (z) { return z.k === 'notes'; }).value, 'Rack behind the credenza');
+    /* every column of a device record is shown or deliberately structural; a column added later appears by itself */
+    const known = {};
+    FRP.deviceCatalogue().forEach(function (g) { g[1].forEach(function (z) { known[z.k] = 1; if (z.status) known[z.status] = 1; if (z.by) known[z.by] = 1; }); });
+    FRP.DEVICE_STRUCTURAL.forEach(function (k) { known[k] = 1; });
+    S.T.devices.colNames.concat(S.COMMON_COLS).forEach(function (k) { assert(known[k], 'device column ' + k + ' is in the report'); });
+    const T = S.T.devices;
+    T.columns.push({ name: 'future_field', type: 'text', ref: null }); T.colNames.push('future_field');
+    try {
+      const d = Object.assign({}, store.get('devices', x.cam.id), { future_field: 'Recorded later' });
+      const z = FRP.deviceFields(d).fields.find(function (q) { return q.k === 'future_field'; });
+      eq([z && z.group, z && z.label, z && z.value], ['Other recorded fields', 'Future field', 'Recorded later']);
+    } finally { T.columns.pop(); T.colNames.pop(); }
+    /* what the data model does not have is named, not made up */
+    const un = m.unavailable.map(function (u) { return u[0]; });
+    assert(un.indexOf('Punch list priority / severity') >= 0 && un.indexOf('Device status or condition') >= 0, 'missing fields are listed: ' + un.join(', '));
+    const sum = FRP.summary(m).join(' ');
+    assert(/3 rooms/.test(sum) && /3 punch list items: 2 open, 1 resolved/.test(sum) && /No devices are recorded yet in: R-30 Empty room/.test(sum), 'the summary states counts only: ' + sum);
+    /* generating it changes nothing */
+    const v = store.version; FRP.build(x.f.id); eq(store.version, v, 'building the report writes nothing');
+  });
+  test('floor report PDF: a valid document with every room on its own page, each device beside its own photographs, every punch item, bookmarks, and a missing image named instead of replaced', async function () {
+    const x = await reportFloor();
+    const m = FRP.build(x.f.id);
+    const out = await FRP.pdf(m, {});
+    await save('floor_report_test.pdf', out.blob);
+    const bytes = new Uint8Array(await out.blob.arrayBuffer());
+    let txt = ''; for (let i = 0; i < bytes.length; i++) txt += String.fromCharCode(bytes[i]);
+    assert(txt.indexOf('%PDF-1.4') === 0 && /%%EOF\n$/.test(txt), 'PDF header and trailer');
+    const xrefPos = parseInt(/startxref\n(\d+)\n%%EOF/.exec(txt.slice(-80))[1], 10);
+    const xl = txt.slice(xrefPos, xrefPos + 40 + 20 * 2000).split('\n'), count = parseInt(xl[1].split(' ')[1], 10);
+    for (let i = 1; i < count; i++) { const off = parseInt(xl[2 + i].slice(0, 10), 10); assert(txt.substr(off, 12).indexOf(i + ' 0 obj') === 0, 'xref entry ' + i); }
+    eq((txt.match(/\/Type \/Page /g) || []).length, out.pages, 'page count');
+    const man = out.manifest;
+    let last = -1;
+    m.rooms.forEach(function (r) { const pgx = man.rooms[r.id].page; assert(pgx > last, 'each room starts on a later page: ' + r.label); last = pgx; assert(man.pages[pgx].rooms.indexOf(r.label) >= 0); });
+    m.rooms.forEach(function (r) { r.devices.forEach(function (d) {
+      const md = man.devices[d.code];
+      assert(md, 'device profile ' + d.code);
+      md.photoPages.forEach(function (pgx) { eq(pgx, md.page, d.code + ': its photographs are on the page of its profile'); });
+      d.photos.forEach(function (p) { assert(man.pages[md.page].photos.indexOf(p.code) >= 0, d.code + ' shows its own photograph ' + p.code); });
+    }); });
+    FRP.photoIds(m).forEach(function (id) { assert(man.photos[id], 'photograph placed: ' + store.get('photos', id).code); });
+    m.punch.forEach(function (p) { assert(man.punch[p.code] != null && man.consolidated[p.code] != null, 'punch item in its room and in the floor list: ' + p.code); });
+    eq(out.missing.map(function (q) { return q.code; }), [x.pLost.code], 'the photograph without an image file is reported');
+    assert(txt.indexOf('(Image file not available)') >= 0 && txt.indexOf('(' + x.pLost.code + ')') >= 0, 'and named where it would have been');
+    eq((txt.match(/\/Subtype \/Image/g) || []).length, FRP.photoIds(m).length - 1, 'every other photograph is embedded once, nothing stands in for the missing one');
+    assert(txt.indexOf('(' + FRP.NO_PUNCH + ')') >= 0, 'a room without punch items says so');
+    [x.cam.code, x.disp.code, x.bar.code, 'Not recorded', 'PROOF OF CONCEPT'].forEach(function (sv) { assert(txt.indexOf('(' + sv) >= 0, 'the PDF shows ' + sv); });
+    assert(/\/Outlines \d+ 0 R \/PageMode \/UseOutlines/.test(txt) && /<< \/Type \/Outlines \/First \d+ 0 R \/Last \d+ 0 R \/Count \d+ >>/.test(txt), 'bookmarks');
+    eq((txt.match(/<< \/Title <FEFF[0-9A-F]*> \/Parent/g) || []).length, 4 + 1 + m.rooms.length + 1, 'one bookmark per section and per room');
+  });
+  test('floor report web page: one self-contained file that loads nothing and connects nowhere, shows every room, device, photograph and punch item, keeps record text as text, and opens pictures full size', async function () {
+    const x = await reportFloor();
+    const m = FRP.build(x.f.id);
+    const out = await FRP.html(m, { keepText: true });
+    const t = out.text;
+    assert(t.indexOf('<!doctype html>') === 0 && /<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:;/.test(t), 'a complete page with a policy that allows nothing from outside');
+    assert(!/\s(src|href)="(?!data:image\/jpeg;base64,|#)/.test(t), 'no address outside the file');
+    eq((t.match(/<img src="data:image\/jpeg;base64,/g) || []).length, FRP.photoIds(m).length - 1 + m.rooms.filter(function (r) { return r.photos.length && !(r.photos[0].id === x.pLost.id); }).length, 'every photograph (and each room\'s first again in the floor summary)');
+    assert(t.indexOf('Image file not available — ' + x.pLost.code) >= 0, 'the missing image is named');
+    m.rooms.forEach(function (r) { assert(t.indexOf('id="' + r.anchor + '"') >= 0 && t.indexOf('href="#' + r.anchor + '"') >= 0, 'room section and link: ' + r.label); });
+    m.punch.forEach(function (p) { assert(t.indexOf(p.code) >= 0, 'punch item ' + p.code); });
+    m.rooms.forEach(function (r) { r.devices.forEach(function (d) { assert(t.indexOf('id="device-' + d.code + '"') >= 0, 'device ' + d.code); }); });
+    assert(t.indexOf('&lt;img src=x onerror=alert(1)&gt; label missing') >= 0 && t.indexOf('<img src=x') < 0, 'record text stays text');
+    eq((t.match(/<script>/g) || []).length, 1, 'one script: the picture viewer and the room menu');
+    assert(t.indexOf(FRP.NO_PUNCH) >= 0 && t.indexOf('id="punchlist"') >= 0 && t.indexOf('id="notes"') >= 0);
+    /* in a browser: a picture opens full size; at phone width nothing spills sideways */
+    const frame = document.createElement('iframe');
+    frame.style.cssText = 'width:390px;height:700px;border:0;position:fixed;left:-2000px;top:0';
+    const url = URL.createObjectURL(out.blob);
+    try {
+      await new Promise(function (res) { frame.onload = res; frame.src = url; document.body.appendChild(frame); });
+      const d = frame.contentDocument;
+      await wait(150);
+      assert(d.documentElement.scrollWidth <= 391, 'fits a phone screen (' + d.documentElement.scrollWidth + ' px)');
+      d.querySelector('.fr-room .fr-fig img').click(); await wait(50);
+      assert(d.getElementById('lb').classList.contains('on') && /^data:image\/jpeg/.test(d.querySelector('#lb img').src), 'the viewer opens the picture');
+      d.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); await wait(30);
+      assert(!d.getElementById('lb').classList.contains('on'), 'and closes');
+    } finally { frame.remove(); URL.revokeObjectURL(url); }
+  });
+  test('floor reports in the application: chosen from the floor or the menu, previewed read-only with the photographs, saved as PDF or web report, the export logged and no record changed', async function () {
+    const x = await reportFloor();
+    EV.go('/rooms/floor/' + x.f.id); await wait(120);
+    document.getElementById('floor-report').click(); await wait(150);
+    eq(EV.router.parts.slice(0, 2), ['floor-report', x.f.id], 'the floor page leads to its report');
+    const page = document.querySelector('.page');
+    assert(/Floor 20 — AV Environment Audit/.test(page.textContent) && /Proof of Concept/i.test(page.textContent), 'titled and marked as a proof of concept');
+    eq(page.querySelectorAll('.fr-room').length, 3, 'every room is in the preview');
+    assert(!page.querySelector('.fr-paper input, .fr-paper textarea, .fr-paper select'), 'the preview edits nothing');
+    assert(page.querySelectorAll('.fr-paper .fr-imgbtn img').length >= 4, 'photographs are shown');
+    assert(document.getElementById('fr-pdf') && document.getElementById('fr-html') && document.getElementById('fr-link'), 'PDF, web report and link');
+    EV.go('/floor-report'); await wait(120);
+    assert(Array.prototype.some.call(document.querySelectorAll('.page .row'), function (r) { return /Floor 20/.test(r.textContent) && /3 rooms/.test(r.textContent); }), 'the floor is offered in the list');
+    /* saving: the file is handed over, the export is logged; nothing else changes */
+    const m = FRP.build(x.f.id);
+    const before = JSON.stringify(['rooms', 'devices', 'photos', 'punch_items'].map(function (tb) { return store.all(tb).map(function (r) { return r.id + r.updated_at; }); }));
+    const realSave = EV.saveFile, got = [];
+    EV.saveFile = function (blob, name, mime) { got.push([name, mime, blob.size]); return Promise.resolve({ ok: true, via: 'test' }); };
+    try {
+      const r1 = await FRP.download(m, 'pdf'), r2 = await FRP.download(m, 'html');
+      eq([r1.ok, r2.ok, got.length], [true, true, 2]);
+      assert(/Floor_20_AV_Environment_Audit_Report_Test_Tower_\d{4}-\d\d-\d\d\.pdf$/.test(got[0][0]) && got[0][1] === 'application/pdf' && /_web\.html$/.test(got[1][0]), 'file names: ' + got.map(function (g) { return g[0]; }).join(', '));
+    } finally { EV.saveFile = realSave; }
+    eq(JSON.stringify(['rooms', 'devices', 'photos', 'punch_items'].map(function (tb) { return store.all(tb).map(function (r) { return r.id + r.updated_at; }); })), before, 'no record was changed');
+    assert(store.all('activity_log').filter(function (l) { return l.action === 'exported' && /Floor 20 — AV Environment Audit/.test(l.summary); }).length >= 2, 'each export is in the change history');
+    /* a read-only account sees and saves the report too */
+    store.readOnly = true;
+    try { EV.go('/floor-report/' + x.f.id); await wait(120); assert(document.querySelectorAll('.fr-room').length === 3 && !document.getElementById('fr-pdf').disabled, 'read-only accounts can open and save it'); }
+    finally { store.readOnly = false; }
     EV.go('/'); await wait(50);
   });
   /* ------------------------------------------------------------------ runner */

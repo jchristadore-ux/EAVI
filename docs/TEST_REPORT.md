@@ -38,6 +38,18 @@ What was tested, how, with what result — and what was not. Date of this run: *
 > `tbl1`, which Excel refuses; fixed). The validator now opens each workbook in its own Excel instance. AI
 > identification was exercised only against a stand-in service: **no real AI provider was called** (§7).
 >
+> **Later run, 25 November 2026 (floor report):** 85 tests; **85 pass**. This run was made in headless Google Chrome
+> on Linux, not on the Windows machine: `tools\build.ps1` and `tools\serve.ps1` were replaced by equivalent scripts
+> (the service worker they produced from the unchanged code was byte-identical to the committed `app/sw.js`).
+> `tools\validate-outputs.ps1` was **not** run (no Excel or Windows PDF engine there); the floor report PDF the suite
+> writes was checked with `qpdf --check` and `pdfinfo` instead. The four new tests (82–85) build a floor with three
+> rooms, an empty one, devices with and without photographs, a listed item, a capture awaiting review, an archived
+> device, a photograph whose file is gone, a floor photograph and punch items; they check the report model against the
+> records, the PDF (structure, a room per page, every device's photographs on its profile's page, every photograph and
+> punch item placed, the missing one named, bookmarks), the web file (nothing loaded from outside, record text escaped,
+> the viewer, 390 px width) and the pages (read-only preview, downloads, export logged, no record changed). The
+> navigation and phone-layout tests now include the two new screens.
+>
 > **Later run, 24 November 2026 (punch list):** 81 tests; **81 pass**, and `tools/validate-outputs.ps1` opened the
 > punch list workbook in Excel without repair. The new test types three lines into a room's punch list, checks that
 > nothing can be added until *To be resolved by* is chosen, adds them, resolves and reopens one from the list (who and
@@ -206,6 +218,10 @@ text. They do not show that the SQL runs, or that Supabase behaves as the mocks 
 | 74 | listed equipment | Room details become listed assets without guessing (N/A skipped, quantities counted, a bar named twice is one device, misspelt names not corrected); listing twice adds nothing; listed assets are not in the audit screens, follow-ups or quality filters; a capture confirms a listed asset in place; a capture can be linked to one; "not in this room" archives it and it is not listed again |
 | 69 | upgrade in place | The new object stores exist; `supabase/schema.sql` adds every new column with `if not exists` and re-applies the identifier status list with `unavailable`; no value list exists only inside a `create table`; the daily export's device columns are unchanged |
 | 81 | punch list | One item per line, nothing assigned until a party is chosen (or *Decide later*); resolve / reopen records and clears who and when; the edit sheet links a device of the room; filters by status, party, building and text; Excel and CSV export room by room with the formula guard; read-only view; a room with punch items is archived, not deleted |
+| 82 | floor report model | Every room of the floor in natural order, its devices (not archived ones), listed items, captures awaiting review and punch items; each device's own photographs only, main first; every photograph on the floor shown or named in the notes; values exactly as stored with their status, empty core fields *Not recorded*, other empty fields named; every device column covered, and a column added at run time shown under *Other recorded fields*; fields the model lacks listed; building the model writes nothing |
+| 83 | floor report PDF | Valid structure (xref checked), one room per page in order, each device's photographs on the page of its profile, every photograph and punch item placed, the photograph without a file named and not replaced, the empty room's punch list sentence, bookmarks for each section and room |
+| 84 | floor report web page | One file; policy allows nothing from outside; no outside address; every photograph embedded; rooms, devices and punch items present; markup typed into a punch item stays text; one script; the viewer opens and closes; fits 390 px |
+| 85 | floor reports in the application | The floor page leads to the report; the preview shows every room and photographs and has no field to edit; the floor list offers the floor; PDF and web report are handed to the save function with the expected names; the exports are logged; no room, device, photograph or punch record changed; a read-only account can open and save it |
 
 ## 5. Manual checks (11–12 November 2026)
 
